@@ -68,7 +68,8 @@ public:
    };
    Properties* properties;
 
-
+   virtual void advect(std::vector<Particle2>)=0;
+   virtual bool swapState();
 
    Particle2(); //create properties in the heap
    Particle2(const Particle2&);
@@ -78,5 +79,13 @@ protected:
    Properties* newProperties;
 
 };
+
+class solid : public virtual Particle2{
+   virtual void advect(std::vector<Particle2>);
+};
+class liquid : public virtual Particle2{};
+class gas : public virtual Particle2{};
+class explosive : public virtual Particle2{};
+class corrosive : public virtual Particle2{};
 
 #endif // MODEL_H
