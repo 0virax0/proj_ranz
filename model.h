@@ -126,7 +126,7 @@ typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const T &t, const float newPo
         //trovo indice
         index=0;
         for(int i=0; i<dim;i++)
-           if(newPos[dim] > p.ptr->position[dim])
+           if(newPos[i] > p.ptr->position[i])
               index += 2^i; //se sono strettamente maggiore al pivot nella dimensione considerata setto la bitmask in modo da puntare il figlio corretto
         nP = p[index]; //seleziono il sottoalbero
     }
