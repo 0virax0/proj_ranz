@@ -5,10 +5,14 @@ template<class T, int dim>
 class Tree{     //albero n-dimensionale di ricerca
 protected:
     class Node{
-    public:
+        friend class Iterator;
+        friend class Tree;
+    protected:
         T* data;
+        Node* setChild(Node* n, int index);
+        Node* children[2^dim];
+    public:
         float position[dim];
-        Node* children[dim];
 
         Node();
         Node(const Node& n);
@@ -20,21 +24,27 @@ public:
     class Iterator{
     private:
         Node* ptr;  //nodo<T>
+        int currIndex;
     public:
-        Iterator* pastEnd;
+        static Iterator* pastEnd = Iterator();
 
         Iterator();
         Iterator(const Iterator& i);
+        Iterator(const Node& n);
 
         bool operator==(const Iterator&) const;
         bool operator!=(const Iterator&) const;
         //se tento di andare pastTheEnd, non modifico ptr, ma ritorno l'iteratore pastEnd dereferenziato
-        Iterator& operator[](int child);    //navigo tra i figli del seguente nodo
-        Iterator& operator++();             //scendo di un livello (non salgo per evitare il doppio linkaggio)
+        Iterator operator[](int child);    //ritorno un figlio del nodo e setto currIndex
+        Iterator operator++();             //scendo di un livello, nel figlio currIndex (non salgo per evitare il doppio linkaggio)
+        Iterator operator++(int);
 
-        T* operator*();                     //ritorno il T* per renderlo nullable
+        T& operator*();
+        T* operator->();
+
+        Iterator& operator =(const Iterator&);
     };
-    protected: Iterator r; /*primo nodo radice*/ public:
+    protected: Node r; /*primo nodo radice*/ public:
     Iterator& root();
 
     Tree();
@@ -42,7 +52,7 @@ public:
     Tree& operator=(const Tree& t); //assegnazione profonda
 
     Iterator insert(const T& t, const float newPos[dim]);
-    Iterator move(Iterator m, const float newPos[dim]);
+    Iterator update();  //aggiorno le posizioni di tutti i nodi
     bool del(Iterator d);
     Iterator findNearest(const float Pos[dim]);
 
@@ -88,4 +98,38 @@ class gas : public virtual Particle2{};
 class explosive : public virtual Particle2{};
 class corrosive : public virtual Particle2{};
 
+//implementazione tree
+
+template<class T, int dim>
+Tree<T,dim>::Node::Node():data(nullptr), position({0}){ }
+template<class T, int dim>
+Tree<T,dim>::Node::Node(const Node& n){  }
+template<class T, int dim>
+Tree<T,dim>::Node::Node(T* d){}
+template<class T, int dim>
+Tree<T,dim>::Node::~Node(){}
+
+template<class T, int dim>
+typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const T &t, const float newPos[dim])
+{
+    Node* n = new Node(&t);
+    Iterator p = root();
+    if(p==Iterator::pastEnd){
+        r = n;
+       return Iterator(r);
+    }
+    //navigo tra i rami e inserisco non appena trovo spazio
+    Iterator nP = p;
+    int index=0;
+    while(nP != Iterator::pastEnd){
+        p = nP; //scendo nel sottoalbero
+        //trovo indice
+        index=0;
+        for(int i=0; i<dim;i++)
+           if(newPos[dim] > p.ptr->position[dim])
+              index += 2^i; //se sono strettamente maggiore al pivot nella dimensione considerata setto la bitmask in modo da puntare il figlio corretto
+        nP = p[index]; //seleziono il sottoalbero
+    }
+    return Iterator(p.ptr->setChild(n,index));
+}
 #endif // MODEL_H
