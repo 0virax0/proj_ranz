@@ -10,7 +10,7 @@ protected:
         friend class Iterator;
         friend class Tree;
     protected:
-        T* data;
+        T* data;    //deve essere allocato nello heap
         Node* setChild(Node* n, int index);
         vector<Node*> children;
     public:
@@ -19,8 +19,9 @@ protected:
         Node();
         Node(const Node& n);
         Node(T* d, vector<float> pos);
+        Node& operator =(const Node&);  //copio profondamente data, ma non i figli
 
-        ~Node();
+        ~Node();       //distruggo anche l'oggetto puntato ma non i figli
     };
 public:
     class Iterator{
@@ -32,7 +33,7 @@ public:
 
         Iterator();
         Iterator(const Iterator& i);
-        Iterator(const Node& n);
+        explicit Iterator(const Node& n, int index = 0);
 
         bool operator==(const Iterator&) const;
         bool operator!=(const Iterator&) const;
@@ -53,8 +54,8 @@ public:
     Tree(const Tree& t);    //copia profonda
     Tree& operator=(const Tree& t); //assegnazione profonda
 
-    Iterator insert(const T& t, const float newPos[dim]);
-    Iterator insert(const Iterator& t, const float newPos[dim]);        //sposto un nodo(anche da un altro albero) e lo aggiorno
+    Iterator insert(const T& t, const vector<float> newPos);
+    Iterator insert(const Iterator& t, const vector<float> newPos);        //sposto un nodo(anche da un altro albero) e lo aggiorno
     Iterator detach(const Iterator& t); //stacca un nodo e lo ritorna
     bool del(Iterator d);
     Iterator findNearest(const float Pos[dim])const;
@@ -65,9 +66,9 @@ public:
 template<class T, int dim>
 class NearTree : public Tree<T, dim>{
 protected:
-    static std::vector<T>& findNrecursive(std::vector<T>& v, float targetPos[dim], int maxDistance, typename Tree<T,dim>::Iterator it, const float bounds[dim]);
+    static std::vector<T>& findNrecursive(std::vector<T>& v, const vector<float> targetPos, int maxDistance, typename Tree<T,dim>::Iterator it, const vector<float> bounds);
 public:
-    std::vector<T>& findNeighbouring(std::vector<T>& v, float targetPos[dim], int maxDistance, typename Tree<T,dim>::Iterator it = Tree<T,dim>::root()) const;
+    std::vector<T>& findNeighbouring(std::vector<T>& v, const vector<float> targetPos, int maxDistance, typename Tree<T,dim>::Iterator it = Tree<T,dim>::root()) const;
 };
 
 class Particle2{
@@ -101,8 +102,7 @@ class gas : public virtual Particle2{};
 class explosive : public virtual Particle2{};
 class corrosive : public virtual Particle2{};
 
-//implementazione tree
-
+//implementazione Node
 template<class T, int dim>
 Tree<T,dim>::Node::Node():position(dim,0), data(nullptr), children( 2^dim, nullptr) { }
 template<class T, int dim>
@@ -110,10 +110,31 @@ Tree<T,dim>::Node::Node(const Node& n): position(n.position), data(new T(*n.data
 template<class T, int dim>
 Tree<T,dim>::Node::Node(T* d, vector<float> pos):position(pos), data(d), children(2^dim, nullptr) {}
 template<class T, int dim>
-Tree<T,dim>::Node::~Node(){}
+typename Tree<T,dim>::Node& Tree<T,dim>::Node::operator =(const typename Tree<T,dim>::Node& n){
+    position = n.position;
+    data = new T(*n.data);
+    children(dim, nullptr);
+
+    return *this;
+}
+template<class T, int dim>
+Tree<T,dim>::Node::~Node(){delete data;}
+
+//implementazione Tree::Iterator
+template<class T, int dim>
+Tree<T,dim>::Iterator::Iterator() : ptr(nullptr), currIndex(0){}
+template<class T, int dim>
+Tree<T,dim>::Iterator::Iterator(const Iterator& i) : ptr(i.ptr), currIndex(i.currIndex){}
+template<class T, int dim>
+Tree<T,dim>::Iterator::Iterator(const Node& n, int index) : ptr(&n), currIndex(index){}
 
 template<class T, int dim>
-typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const T &t, const vector<float> newPos[dim])
+bool Tree<T,dim>::Iterator::operator==(const typename Tree<T,dim>::Iterator& it) const{return ptr==it.ptr | currIndex==it.currIndex; }
+template<class T, int dim>
+bool Tree<T,dim>::Iterator::operator!=(const typename Tree<T,dim>::Iterator& it ) const{return ptr!=it.ptr | currIndex!=it.currIndex; }
+
+template<class T, int dim>
+typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const T &t, const vector<float> newPos)
 {
     Node* n = new Node(&t, newPos);
     Iterator p = root();
