@@ -129,9 +129,9 @@ template<class T, int dim>
 Tree<T,dim>::Iterator::Iterator(const Node& n, int index) : ptr(&n), currIndex(index){}
 
 template<class T, int dim>
-bool Tree<T,dim>::Iterator::operator==(const typename Tree<T,dim>::Iterator& it) const{return ptr==it.ptr | currIndex==it.currIndex; }
+bool Tree<T,dim>::Iterator::operator==(const typename Tree<T,dim>::Iterator& it) const{return ptr==it.ptr && currIndex==it.currIndex; }
 template<class T, int dim>
-bool Tree<T,dim>::Iterator::operator!=(const typename Tree<T,dim>::Iterator& it ) const{return ptr!=it.ptr | currIndex!=it.currIndex; }
+bool Tree<T,dim>::Iterator::operator!=(const typename Tree<T,dim>::Iterator& it ) const{return ptr!=it.ptr || currIndex!=it.currIndex; }
 
 template<class T, int dim>
 typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const T &t, const vector<float> newPos)
