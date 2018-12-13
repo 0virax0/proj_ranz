@@ -1,6 +1,8 @@
 #ifndef MODEL_H
 #define MODEL_H
 #include <vector>
+using std::vector;
+
 template<class T, int dim>
 class Tree{     //albero n-dimensionale di ricerca
 protected:
@@ -10,13 +12,13 @@ protected:
     protected:
         T* data;
         Node* setChild(Node* n, int index);
-        Node* children[2^dim];
+        vector<Node*> children;
     public:
-        float position[dim];
+        vector<float> position;
 
         Node();
         Node(const Node& n);
-        Node(T* d);
+        Node(T* d, vector<float> pos);
 
         ~Node();
     };
@@ -52,9 +54,10 @@ public:
     Tree& operator=(const Tree& t); //assegnazione profonda
 
     Iterator insert(const T& t, const float newPos[dim]);
-    Iterator update();  //aggiorno le posizioni di tutti i nodi
+    Iterator insert(const Iterator& t, const float newPos[dim]);        //sposto un nodo(anche da un altro albero) e lo aggiorno
+    Iterator detach(const Iterator& t); //stacca un nodo e lo ritorna
     bool del(Iterator d);
-    Iterator findNearest(const float Pos[dim]);
+    Iterator findNearest(const float Pos[dim])const;
 
     ~Tree();    //distruzione profonda
 };
@@ -101,18 +104,18 @@ class corrosive : public virtual Particle2{};
 //implementazione tree
 
 template<class T, int dim>
-Tree<T,dim>::Node::Node():data(nullptr), position({0}){ }
+Tree<T,dim>::Node::Node():position(dim,0), data(nullptr), children( 2^dim, nullptr) { }
 template<class T, int dim>
-Tree<T,dim>::Node::Node(const Node& n){  }
+Tree<T,dim>::Node::Node(const Node& n): position(n.position), data(new T(*n.data)), children(n.children){  }
 template<class T, int dim>
-Tree<T,dim>::Node::Node(T* d){}
+Tree<T,dim>::Node::Node(T* d, vector<float> pos):position(pos), data(d), children(2^dim, nullptr) {}
 template<class T, int dim>
 Tree<T,dim>::Node::~Node(){}
 
 template<class T, int dim>
-typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const T &t, const float newPos[dim])
+typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const T &t, const vector<float> newPos[dim])
 {
-    Node* n = new Node(&t);
+    Node* n = new Node(&t, newPos);
     Iterator p = root();
     if(p==Iterator::pastEnd){
         r = n;
