@@ -23,6 +23,9 @@ protected:
 
         ~Node();       //distruggo anche l'oggetto puntato ma non i figli
     };
+
+    static Node* copy(Node*);
+    static void destroy(Node*);
 public:
     class Iterator{
     private:
@@ -48,16 +51,22 @@ public:
         Iterator& operator =(const Iterator&);
     };
     protected: Node r; /*primo nodo radice*/ public:
-    Iterator& root();
+    Iterator root();
 
     Tree();
     Tree(const Tree& t);    //copia profonda
     Tree& operator=(const Tree& t); //assegnazione profonda
 
     Iterator insert(const T& t, const vector<float> newPos);
-    Iterator insert(const Iterator& t, const vector<float> newPos);        //sposto un nodo(anche da un altro albero) e lo aggiorno
-    Iterator detach(const Iterator& t); //stacca un nodo e lo ritorna
-    bool del(Iterator d);
+    Iterator insert(const Iterator& t);        //sposto un nodo(anche da un altro albero)
+
+    template<class Lambda>
+    void detach(const Tree& dest, Lambda fn); //stacca tutto l'albero
+    template<class Lambda>
+    static void detach(const Iterator& t, const Tree& dest, Lambda fn); //stacca un sottoalbero s da t[s], applica la lambda sui nodi e li inserisce in un altro albero, fn deve ritornare una nuova position per il nodo
+
+    bool del(); //svuota l'albero
+    bool del(Iterator d);   //elimina il sottoalbero s da d[s]
     Iterator findNearest(const float Pos[dim])const;
 
     ~Tree();    //distruzione profonda
@@ -129,10 +138,47 @@ template<class T, int dim>
 Tree<T,dim>::Iterator::Iterator(const Node& n, int index) : ptr(&n), currIndex(index){}
 
 template<class T, int dim>
-bool Tree<T,dim>::Iterator::operator==(const typename Tree<T,dim>::Iterator& it) const{return ptr==it.ptr && currIndex==it.currIndex; }
+bool Tree<T,dim>::Iterator::operator==(const typename Tree<T,dim>::Iterator& it) const{return ptr==it.ptr && (ptr==nullptr || currIndex==it.currIndex);}
 template<class T, int dim>
-bool Tree<T,dim>::Iterator::operator!=(const typename Tree<T,dim>::Iterator& it ) const{return ptr!=it.ptr || currIndex!=it.currIndex; }
+bool Tree<T,dim>::Iterator::operator!=(const typename Tree<T,dim>::Iterator& it ) const{return !(ptr==it.ptr && (ptr==nullptr || currIndex==it.currIndex));}
 
+template<class T, int dim>
+typename Tree<T,dim>::Iterator Tree<T,dim>::Iterator::operator[](int child){
+    return Iterator(ptr->children[child]);
+}
+template<class T, int dim>
+typename Tree<T,dim>::Iterator Tree<T,dim>::Iterator::operator++(){
+    Node* n = ptr->children[currIndex];
+    if(!n) return pastEnd;
+    ptr = n;
+    return *this;
+}
+template<class T, int dim>
+typename Tree<T,dim>::Iterator Tree<T,dim>::Iterator::operator++(int){
+    Node* n = ptr->children[currIndex];
+    if(!n) return pastEnd;
+    Iterator i = *this;
+    ptr = n;
+    return i;
+}
+
+template<class T, int dim>
+T& Tree<T,dim>::Iterator::operator*(){
+    return *(ptr->data);
+}
+template<class T, int dim>
+T* Tree<T,dim>::Iterator::operator->(){
+    return ptr->data;
+}
+
+template<class T, int dim>
+typename Tree<T,dim>::Iterator& Tree<T,dim>::Iterator::operator=(const Iterator& t){
+    ptr = t.ptr;
+    currIndex = t.currIndex;
+    return *this;
+}
+
+//implementazione albero
 template<class T, int dim>
 typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const T &t, const vector<float> newPos)
 {
@@ -142,6 +188,7 @@ typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const T &t, const vector<floa
         r = n;
        return Iterator(r);
     }
+
     //navigo tra i rami e inserisco non appena trovo spazio
     Iterator nP = p;
     int index=0;
@@ -156,4 +203,97 @@ typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const T &t, const vector<floa
     }
     return Iterator(p.ptr->setChild(n,index));
 }
+template<class T, int dim>
+typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const Iterator& t){
+    Node* n = t.currIndex;
+    Iterator p = root();
+    if(p==Iterator::pastEnd){
+        r = n;
+       return Iterator(r);
+    }
+
+    //navigo tra i rami e inserisco non appena trovo spazio
+    Iterator nP = p;
+    int index=0;
+    while(nP != Iterator::pastEnd){
+        p = nP; //scendo nel sottoalbero
+        //trovo indice
+        index=0;
+        for(int i=0; i<dim;i++)
+           if(n->position[i] > p.ptr->position[i])
+              index += 2^i; //se sono strettamente maggiore al pivot nella dimensione considerata setto la bitmask in modo da puntare il figlio corretto
+        nP = p[index]; //seleziono il sottoalbero
+    }
+    return Iterator(p.ptr->setChild(n,index));
+}
+
+template<class T, int dim>
+typename Tree<T,dim>::Node* Tree<T,dim>::copy(Node* r){
+    if(!r)return nullptr;
+
+    Node* n = new Node(r);
+    for(int i=0; i<(2^dim); i++){
+        n->children[i] = copy(r->children[i]);
+    }
+    return n;
+}
+template<class T, int dim>
+void Tree<T,dim>::destroy(Node* r){
+   if(!r)return;
+
+   for(int i=0; i<(2^dim); i++){
+       destroy(r->children[i]);
+   }
+}
+template<class T, int dim>
+Tree<T,dim>::Tree(): r(nullptr){  }
+template<class T, int dim>
+Tree<T,dim>::Tree(const Tree& t): r(copy(t)){  }
+template<class T, int dim>
+Tree<T,dim>& Tree<T,dim>::operator=(const Tree<T,dim>& t){
+   if(*this == t) return *this;
+    destroy(r);
+    r = copy(t);
+}
+template<class T, int dim>
+Tree<T,dim>::~Tree(){
+    detroy(r);
+}
+
+template<class T, int dim>
+typename Tree<T,dim>::Iterator Tree<T,dim>::root(){
+    return Iterator(r);
+}
+
+template<class T, int dim>
+template<class Lambda>
+void Tree<T,dim>::detach(const Tree& dest, Lambda fn){
+    Iterator curr = root();
+    for(int i=0; i<(2^dim); i++){
+        curr.currIndex = i;
+        detach(curr, dest, fn);
+    }
+    r = nullptr;
+    curr.ptr->position = fn(curr);
+    dest.insert(curr);
+}
+template<class T, int dim>
+template<class Lambda>
+void Tree<T,dim>::detach(const Iterator& t, const Tree& dest, Lambda fn){
+    if(t == Iterator::pastEnd )return;
+    Iterator curr = t[t.currIndex];
+    if(curr == Iterator::pastEnd) return;
+
+    //prima stacco i figli poi il sottoalbero
+    int startIndex = curr.currIndex;
+    curr.currIndex=0;
+    for(int i=0; i<(2^dim); i++){
+       curr.currIndex = i;
+       detach(curr, dest, fn);
+    }
+    t.ptr->children[startIndex]=nullptr;
+    curr.ptr->position = fn(curr);
+    dest.insert(curr);
+}
+
 #endif // MODEL_H
