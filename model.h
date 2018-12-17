@@ -144,13 +144,16 @@ bool Tree<T,dim>::Iterator::operator!=(const typename Tree<T,dim>::Iterator& it 
 
 template<class T, int dim>
 typename Tree<T,dim>::Iterator Tree<T,dim>::Iterator::operator[](int child){
-    return Iterator(ptr->children[child]);
+    Node* n = ptr->children[child];
+    if(n) currIndex = child;
+    return Iterator(n);
 }
 template<class T, int dim>
 typename Tree<T,dim>::Iterator Tree<T,dim>::Iterator::operator++(){
     Node* n = ptr->children[currIndex];
     if(!n) return pastEnd;
     ptr = n;
+    currIndex = 0;
     return *this;
 }
 template<class T, int dim>
@@ -159,6 +162,7 @@ typename Tree<T,dim>::Iterator Tree<T,dim>::Iterator::operator++(int){
     if(!n) return pastEnd;
     Iterator i = *this;
     ptr = n;
+    currIndex = 0;
     return i;
 }
 
