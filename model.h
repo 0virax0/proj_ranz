@@ -26,6 +26,8 @@ protected:
 
     static Node* copy(Node*);
     static void destroy(Node*);
+    static bool _findNearest(Node*& n, const vector<float>& pos, const vector<float>& bounds, Node**& curr, float& currSqDistance); //bounds è del tipo [Xmin,Xmax , Ymin,Ymax , ...] ritorno in curr un puntatore al puntatore
+    //del padre del nodo più vicino ma non sovrapposto alla posizione pos
 public:
     class Iterator{
     private:
@@ -67,7 +69,7 @@ public:
 
     bool del(); //svuota l'albero
     bool del(Iterator d);   //elimina il sottoalbero s da d[s]
-    Iterator findNearest(const float Pos[dim])const;
+    Iterator findNearest(const vector<float>& v )const;
 
     ~Tree();    //distruzione profonda
 };
@@ -75,7 +77,7 @@ public:
 template<class T, int dim>
 class NearTree : public Tree<T, dim>{
 protected:
-    static std::vector<T>& findNrecursive(std::vector<T>& v, const vector<float> targetPos, int maxDistance, typename Tree<T,dim>::Iterator it, const vector<float> bounds);
+    static std::vector<T>& findNrecursive(std::vector<T>& v, const vector<float> targetPos, int maxDistance, typename Tree<T,dim>::Iterator it, const vector<float>& bounds);
 public:
     std::vector<T>& findNeighbouring(std::vector<T>& v, const vector<float> targetPos, int maxDistance, typename Tree<T,dim>::Iterator it = Tree<T,dim>::root()) const;
 };
@@ -298,6 +300,52 @@ void Tree<T,dim>::detach(const Iterator& t, const Tree& dest, Lambda fn){
     t.ptr->children[startIndex]=nullptr;
     curr.ptr->position = fn(curr);
     dest.insert(curr);
+}
+
+template<class T, int dim>
+bool Tree<T,dim>::_findNearest(Node*& n, const vector<float>& pos, const vector<float>& bounds, Node**& curr, float& currSqDistance){
+    if(!n)return false;
+    bool retVal = false;
+
+    //controllo la mia distanza quadratica
+    float sqDist = 0;
+    for(int i=0; i<dim; i++) sqDist += (n->position[i] - pos[i])^2;
+    if(sqDist != 0.0f && sqDist < currSqDistance){ //se la distanza è 0 sono proprio sul nodo
+        curr = &n;
+        currSqDistance = sqDist;
+        retVal = true;
+    }
+
+    //stimo la minima distanza quadratica di un sottoalbero dai suoi bounds, per capire se continuare la ricerca
+    for(unsigned int c=0; c<(2^dim); c++){ //ogni sottoalbero
+        unsigned char p = static_cast<unsigned char>(c); //uso la rappresentazione binaria
+        if(n->children[c]){ //ho il figlio da analizzare
+           //ricalcolo bounds
+           vector<float> newBounds;
+           for(unsigned int d=0; d<dim; d++){ //ogni dimensione
+               unsigned char isAfterD = p;
+               isAfterD &= 1<<d; //bitmask
+
+               if(isAfterD){
+                    newBounds[2*d] = n->position[d]; //dMin
+                    newBounds[2*d+1] = bounds[2*d+1]; //dMax
+               }else{
+                    newBounds[2*d] = bounds[2*d]; //dMin
+                    newBounds[2*d+1] = n->position[d]; //dMax
+               }
+           }
+
+           float minSqDistance = 0;
+           for(unsigned int d=0; d<dim; d++){ //per ogni dimensione sommo la componente^2 alla distanza solo se la supero
+              float min = newBounds[2*d] - pos[d];
+              float max = newBounds[2*d+1] - pos[d];
+              if(min > 0) minSqDistance += min * min;
+              if(max < 0) minSqDistance += max * max;
+           }
+           if(minSqDistance < currSqDistance) retVal |= _findNearest(n->children[c], pos, newBounds, curr, currSqDistance);
+        }
+    }
+    return retVal;
 }
 
 #endif // MODEL_H
