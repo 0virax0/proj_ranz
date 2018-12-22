@@ -27,7 +27,7 @@ protected:
 
     static Node* copy(Node*);
     static void destroy(Node*);
-    static bool _findNearest(Node*& n, const vector<float>& pos, Node**& curr, float& currSqDistance); //ritorno in curr un puntatore al puntatore
+    static bool _findNearest(Node*& n, const vector<float>& pos, Node**& curr, float& currSqDistance, bool onlyLeaves); //ritorno in curr un puntatore al puntatore, con onlyLeaves prendo la foglia più vicina
     //del padre del nodo più vicino ma non sovrapposto alla posizione pos
 public:
     class Iterator{
@@ -311,20 +311,24 @@ void Tree<T,dim>::detach(const Iterator& t, const Tree& dest, Lambda fn){
 }
 
 template<class T, int dim>
-bool Tree<T,dim>::_findNearest(Node*& n, const vector<float>& pos, Node**& curr, float& currSqDistance){
+bool Tree<T,dim>::_findNearest(Node*& n, const vector<float>& pos, Node**& curr, float& currSqDistance, bool onlyLeaves){
     if(!n)return false;
     bool retVal = false;
 
+    bool skip = false;
+    if(onlyLeaves) //se ho almeno un figlio skippo
+        for(unsigned int i=0; i<(2^dim); i++) skip |= n->children[i] != nullptr;
+    if(!skip){
     //controllo la mia distanza quadratica
-    float sqDist = 0;
-    for(int i=0; i<dim; i++) sqDist += (n->position[i] - pos[i])^2;
-    if(sqDist != 0.0f && sqDist < currSqDistance){ //se la distanza è 0 sono proprio sul nodo
-        curr = &n;
-        currSqDistance = sqDist;
+        float sqDist = 0;
+        for(int i=0; i<dim; i++) sqDist += (n->position[i] - pos[i])^2;
+        if(sqDist != 0.0f && sqDist < currSqDistance){ //se la distanza è 0 sono proprio sul nodo
+            curr = &n;
+            currSqDistance = sqDist;
 
-        retVal = true;
+            retVal = true;
+        }
     }
-
     //stimo la minima distanza quadratica di un sottoalbero dai suoi bounds, per capire se continuare la ricerca
     for(unsigned int c=0; c<(2^dim); c++){ //ogni sottoalbero
         Node* child = n->children[c];
@@ -337,7 +341,7 @@ bool Tree<T,dim>::_findNearest(Node*& n, const vector<float>& pos, Node**& curr,
               if(min > 0) minSqDistance += min * min;
               if(max < 0) minSqDistance += max * max;
            }
-           if(minSqDistance < currSqDistance) retVal |= _findNearest(n->children[c], pos, curr, currSqDistance);
+           if(minSqDistance < currSqDistance) retVal |= _findNearest(n->children[c], pos, curr, currSqDistance, onlyLeaves);
         }
     }
     return retVal;
@@ -346,7 +350,7 @@ template<class T, int dim>
 typename Tree<T,dim>::Iterator Tree<T,dim>::findNearest(const vector<float>& position )const{
     Node** nearestNodePtr;
     float maxDistance = 2;  //maggiore della massima distanza possibile (sqrt(2))
-    bool found = _findNearest(r, position, nearestNodePtr, maxDistance);
+    bool found = _findNearest(r, position, nearestNodePtr, maxDistance, false);
 
     if(!found) return Iterator::pastEnd;
     return Iterator(*nearestNodePtr);
@@ -366,6 +370,14 @@ bool Tree<T,dim>::del(typename Tree<T,dim>::Iterator d){
         delete n;
         return true;
     }
-    //scambio i valori
+    //scambio con il nodo foglia più vicino nel sottoalbero
+    Node** nearestNodePtr;
+    float dist = 2;
+    _findNearest(n, n->position, nearestNodePtr, dist, true);
+    (*nearestNodePtr)->children = n->children; //il nuovo nodo ha gli stessi figli
+    d.ptr->children[d.currIndex] = *nearestNodePtr; //il padre ora punta a lui
+    *nearestNodePtr = nullptr; //rimuovo il vecchio ptr alla foglia
+    delete n;
+    return true;
 }
 #endif // MODEL_H
