@@ -13,6 +13,7 @@ protected:
         T* data;    //deve essere allocato nello heap
         Node* setChild(Node* n, int index);
         vector<Node*> children;
+        vector<float> bounds; //bounds è del tipo [Xmin,Xmax , Ymin,Ymax , ...]
     public:
         vector<float> position;
 
@@ -26,7 +27,7 @@ protected:
 
     static Node* copy(Node*);
     static void destroy(Node*);
-    static bool _findNearest(Node*& n, const vector<float>& pos, const vector<float>& bounds, Node**& curr, float& currSqDistance); //bounds è del tipo [Xmin,Xmax , Ymin,Ymax , ...] ritorno in curr un puntatore al puntatore
+    static bool _findNearest(Node*& n, const vector<float>& pos, Node**& curr, float& currSqDistance); //ritorno in curr un puntatore al puntatore
     //del padre del nodo più vicino ma non sovrapposto alla posizione pos
 public:
     class Iterator{
@@ -67,9 +68,9 @@ public:
     template<class Lambda>
     static void detach(const Iterator& t, const Tree& dest, Lambda fn); //stacca un sottoalbero s da t[s], applica la lambda sui nodi e li inserisce in un altro albero, fn deve ritornare una nuova position per il nodo
 
-    bool del(); //svuota l'albero
-    bool del(Iterator d);   //elimina il sottoalbero s da d[s]
-    Iterator findNearest(const vector<float>& v )const;
+    Iterator findNearest(const vector<float>& position )const;  //ritorna pastEnd se l'albero è vuoto o contiene un elemento nell'esatta posizione
+    bool del(); //toglie la radice
+    bool del(Iterator d);   //toglie il nodo puntato da d[currIndex]
 
     ~Tree();    //distruzione profonda
 };
@@ -115,17 +116,17 @@ class corrosive : public virtual Particle2{};
 
 //implementazione Node
 template<class T, int dim>
-Tree<T,dim>::Node::Node():position(dim,0), data(nullptr), children( 2^dim, nullptr) { }
+Tree<T,dim>::Node::Node():position(dim,0), data(nullptr), children( 2^dim, nullptr), bounds(2*dim, 0) { }
 template<class T, int dim>
-Tree<T,dim>::Node::Node(const Node& n): position(n.position), data(new T(*n.data)), children(n.children){  }
+Tree<T,dim>::Node::Node(const Node& n): position(n.position), data(new T(*n.data)), children(n.children), bounds(n.bounds){  }
 template<class T, int dim>
-Tree<T,dim>::Node::Node(T* d, vector<float> pos):position(pos), data(d), children(2^dim, nullptr) {}
+Tree<T,dim>::Node::Node(T* d, vector<float> pos):position(pos), data(d), children(2^dim, nullptr), bounds(2*dim, 0) {}
 template<class T, int dim>
 typename Tree<T,dim>::Node& Tree<T,dim>::Node::operator =(const typename Tree<T,dim>::Node& n){
     position = n.position;
     data = new T(*n.data);
     children(dim, nullptr);
-
+    bounds(2*dim, 0);
     return *this;
 }
 template<class T, int dim>
@@ -189,32 +190,23 @@ template<class T, int dim>
 typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const T &t, const vector<float> newPos)
 {
     Node* n = new Node(&t, newPos);
-    Iterator p = root();
-    if(p==Iterator::pastEnd){
-        r = n;
-       return Iterator(r);
-    }
-
-    //navigo tra i rami e inserisco non appena trovo spazio
-    Iterator nP = p;
-    int index=0;
-    while(nP != Iterator::pastEnd){
-        p = nP; //scendo nel sottoalbero
-        //trovo indice
-        index=0;
-        for(int i=0; i<dim;i++)
-           if(newPos[i] > p.ptr->position[i])
-              index += 2^i; //se sono strettamente maggiore al pivot nella dimensione considerata setto la bitmask in modo da puntare il figlio corretto
-        nP = p[index]; //seleziono il sottoalbero
-    }
-    return Iterator(p.ptr->setChild(n,index));
+    return insert(Iterator(n));
 }
 template<class T, int dim>
 typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const Iterator& t){
-    Node* n = t.currIndex;
+    Node* n = t.ptr;
     Iterator p = root();
+
+    //inizializzo i bounds
+    vector<float> standardBounds;
+    for(unsigned int i=0; i<2*dim; i+=2){
+       standardBounds[i] = 0.0f;
+       standardBounds[i+1] = 1.0f;
+    }
+
     if(p==Iterator::pastEnd){
         r = n;
+        n->bounds = standardBounds;
        return Iterator(r);
     }
 
@@ -230,6 +222,21 @@ typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const Iterator& t){
               index += 2^i; //se sono strettamente maggiore al pivot nella dimensione considerata setto la bitmask in modo da puntare il figlio corretto
         nP = p[index]; //seleziono il sottoalbero
     }
+
+    //setto i nuovi bounds
+    for(unsigned int d=0; d<dim; d++){ //ogni dimensione
+        unsigned char isAfterD = static_cast<unsigned char>(index);
+        isAfterD &= 1<<d; //bitmask
+
+        if(isAfterD){
+            n->bounds[2*d] = p.ptr->position[d]; //dMin
+            n->bounds[2*d+1] = p.ptr->bounds[2*d+1]; //dMax
+        }else{
+            n->bounds[2*d] = p.ptr->bounds[2*d]; //dMin
+            n->bounds[2*d+1] = p.ptr->position[d]; //dMax
+        }
+    }
+
     return Iterator(p.ptr->setChild(n,index));
 }
 
@@ -250,6 +257,7 @@ void Tree<T,dim>::destroy(Node* r){
    for(int i=0; i<(2^dim); i++){
        destroy(r->children[i]);
    }
+   delete r;
 }
 template<class T, int dim>
 Tree<T,dim>::Tree(): r(nullptr){  }
@@ -303,7 +311,7 @@ void Tree<T,dim>::detach(const Iterator& t, const Tree& dest, Lambda fn){
 }
 
 template<class T, int dim>
-bool Tree<T,dim>::_findNearest(Node*& n, const vector<float>& pos, const vector<float>& bounds, Node**& curr, float& currSqDistance){
+bool Tree<T,dim>::_findNearest(Node*& n, const vector<float>& pos, Node**& curr, float& currSqDistance){
     if(!n)return false;
     bool retVal = false;
 
@@ -313,39 +321,51 @@ bool Tree<T,dim>::_findNearest(Node*& n, const vector<float>& pos, const vector<
     if(sqDist != 0.0f && sqDist < currSqDistance){ //se la distanza è 0 sono proprio sul nodo
         curr = &n;
         currSqDistance = sqDist;
+
         retVal = true;
     }
 
     //stimo la minima distanza quadratica di un sottoalbero dai suoi bounds, per capire se continuare la ricerca
     for(unsigned int c=0; c<(2^dim); c++){ //ogni sottoalbero
-        unsigned char p = static_cast<unsigned char>(c); //uso la rappresentazione binaria
-        if(n->children[c]){ //ho il figlio da analizzare
-           //ricalcolo bounds
-           vector<float> newBounds;
-           for(unsigned int d=0; d<dim; d++){ //ogni dimensione
-               unsigned char isAfterD = p;
-               isAfterD &= 1<<d; //bitmask
-
-               if(isAfterD){
-                    newBounds[2*d] = n->position[d]; //dMin
-                    newBounds[2*d+1] = bounds[2*d+1]; //dMax
-               }else{
-                    newBounds[2*d] = bounds[2*d]; //dMin
-                    newBounds[2*d+1] = n->position[d]; //dMax
-               }
-           }
+        Node* child = n->children[c];
+        if(child){ //ho il figlio da analizzare
 
            float minSqDistance = 0;
            for(unsigned int d=0; d<dim; d++){ //per ogni dimensione sommo la componente^2 alla distanza solo se la supero
-              float min = newBounds[2*d] - pos[d];
-              float max = newBounds[2*d+1] - pos[d];
+              float min = child->bounds[2*d] - pos[d];
+              float max = child->bounds[2*d+1] - pos[d];
               if(min > 0) minSqDistance += min * min;
               if(max < 0) minSqDistance += max * max;
            }
-           if(minSqDistance < currSqDistance) retVal |= _findNearest(n->children[c], pos, newBounds, curr, currSqDistance);
+           if(minSqDistance < currSqDistance) retVal |= _findNearest(n->children[c], pos, curr, currSqDistance);
         }
     }
     return retVal;
 }
+template<class T, int dim>
+typename Tree<T,dim>::Iterator Tree<T,dim>::findNearest(const vector<float>& position )const{
+    Node** nearestNodePtr;
+    float maxDistance = 2;  //maggiore della massima distanza possibile (sqrt(2))
+    bool found = _findNearest(r, position, nearestNodePtr, maxDistance);
 
+    if(!found) return Iterator::pastEnd;
+    return Iterator(*nearestNodePtr);
+}
+
+template<class T, int dim>
+bool Tree<T,dim>::del(typename Tree<T,dim>::Iterator d){
+    if(d[d.currIndex] == Iterator::pastEnd) return false; //il nodo indicato non c'è
+
+    Node* n = d[d.currIndex].ptr;
+    //controllo se il nodo da togliere ha figli
+    bool hasChildren = false;
+    for(unsigned int i=0; i<(2^dim); i++) hasChildren |= n->children[i] != nullptr;
+    if(!hasChildren){
+        //tolgo il nodo direttamente
+        d.ptr->children[d.currIndex] = nullptr;
+        delete n;
+        return true;
+    }
+    //scambio i valori
+}
 #endif // MODEL_H
