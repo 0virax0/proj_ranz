@@ -3,7 +3,7 @@
 #include <vector>
 using std::vector;
 
-template<class T, int dim>
+template<class T, int dim> //dim (1..8)
 class Tree{     //albero n-dimensionale di ricerca
 protected:
     class Node{
@@ -25,6 +25,8 @@ protected:
         ~Node();       //distruggo anche l'oggetto puntato ma non i figli
     };
 
+    Node r;
+
     static Node* copy(Node*);
     static void destroy(Node*);
     static bool _findNearest(Node*& n, const vector<float>& pos, Node**& curr, float& currSqDistance, bool onlyLeaves); //ritorno in curr un puntatore al puntatore, con onlyLeaves prendo la foglia più vicina
@@ -32,7 +34,8 @@ protected:
     bool _del(Node** i);
 public:
     class Iterator{
-    private:
+        friend class Tree;
+    protected:
         Node* ptr;  //nodo<T>
         int currIndex;
     public:
@@ -54,7 +57,6 @@ public:
 
         Iterator& operator =(const Iterator&);
     };
-    protected: Node r; /*primo nodo radice*/ public:
     Iterator root();
 
     Tree();
@@ -79,15 +81,19 @@ public:
 template<class T, int dim>
 class NearTree : public Tree<T, dim>{
 protected:
+    static bool singleConstructed;
     static float intersections[3^dim][dim]; //definisce tutte le intersezioni tra gli spazi dei figli, ordinate per connettività decrescente (-1, 0 per coordinate condivise, 1)
     static unsigned char interMask[3^dim][2];
+
     static void interCombinations(int zeroes, unsigned int indexX, vector<int>tmp, vector<vector<int>>& res);
     static void findNrecursive(typename Tree<T,dim>::Node*& n, const vector<float>& targetPos, int maxDistanceSq, std::vector<typename Tree<T,dim>::Node**>& v);
 public:
-    NearTree();
+    NearTree(); //costruisce solo la prima volta i membri statici per questa istanza di NearTree
 
-    std::vector<T>& findNeighbouring(std::vector<T>& v, const vector<float> targetPos, int maxDistance, typename Tree<T,dim>::Iterator it = Tree<T,dim>::root()) const;
+    void findNeighbouring(typename Tree<T,dim>::Iterator target, int maxDistanceSq, std::vector<T*>& v) const;
+    void deleteNeighbouring(const vector<float>& targetPos, int maxDistance);
 };
+template<class T, int dim> bool NearTree<T,dim>::singleConstructed = false;
 
 class Particle2{
 public:
@@ -398,6 +404,9 @@ bool Tree<T,dim>::_del(Node** i){
 //implementazione nearTree
 template<class T, int dim>
 NearTree<T,dim>::NearTree(){
+    if(singleConstructed) return;
+    singleConstructed = true;
+
 //costruisco la matrice instersections
     vector<vector<int>> res;
     for(int i=3; i>=0; i--) interCombinations(i, 0, vector<int>(dim,0), res); //costruisco tutte le combinazioni con (i) zeri
@@ -479,6 +488,27 @@ void NearTree<T,dim>::findNrecursive(typename Tree<T,dim>::Node*& n, const vecto
         //mi inserisco in v solo ora perchè voglio che v sia in postordine
         if(interIndex == 0) v.push_back(&n);    //con indice 0 indico l'intersezione con maggiore connettività ovvero il nodo stesso
     }
+}
+
+template<class T, int dim>
+void NearTree<T,dim>::findNeighbouring(typename Tree<T,dim>::Iterator target, int maxDistanceSq, std::vector<T*>& v)const{
+    typename Tree<T,dim>::Node*& n = target.ptr;
+
+    vector<typename Tree<T,dim>::Node**> t; //conterrà i nodi da eliminare partendo dalle foglie, in modo da avere meno nodi da spostare
+    findNrecursive(n, n->position, maxDistanceSq, t); //attenzione: n non è il vero riferimento al field child del padre
+
+    for(auto it=t.begin(); it!=t.end(); it++){
+        if(*(*it) != n){    //escludo il nodo passato per parametro
+           v.push_back((**it)->data);
+        }
+    }
+}
+template<class T, int dim>
+void NearTree<T,dim>::deleteNeighbouring(const vector<float>& targetPos, int maxDistanceSq){
+    vector<typename Tree<T,dim>::Node**> v; //conterrà i nodi da eliminare partendo dalle foglie, in modo da avere meno nodi da spostare
+    findNrecursive(Tree<T,dim>::r, targetPos, maxDistanceSq, v);
+
+    for(auto it = v.begin(); it!=v.end(); it++) Tree<T,dim>::_del(*it);
 }
 
 #endif // MODEL_H
