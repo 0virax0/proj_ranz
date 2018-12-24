@@ -29,6 +29,7 @@ protected:
     static void destroy(Node*);
     static bool _findNearest(Node*& n, const vector<float>& pos, Node**& curr, float& currSqDistance, bool onlyLeaves); //ritorno in curr un puntatore al puntatore, con onlyLeaves prendo la foglia più vicina
     //del padre del nodo più vicino ma non sovrapposto alla posizione pos
+    bool _del(Node** i);
 public:
     class Iterator{
     private:
@@ -48,8 +49,8 @@ public:
         Iterator operator++();             //scendo di un livello, nel figlio currIndex (non salgo per evitare il doppio linkaggio)
         Iterator operator++(int);
 
-        T& operator*();
-        T* operator->();
+        T& operator*()const;
+        T* operator->()const;
 
         Iterator& operator =(const Iterator&);
     };
@@ -78,8 +79,13 @@ public:
 template<class T, int dim>
 class NearTree : public Tree<T, dim>{
 protected:
-    static std::vector<T>& findNrecursive(std::vector<T>& v, const vector<float> targetPos, int maxDistance, typename Tree<T,dim>::Iterator it, const vector<float>& bounds);
+    static float intersections[3^dim][dim]; //definisce tutte le intersezioni tra gli spazi dei figli, ordinate per connettività decrescente (-1, 0 per coordinate condivise, 1)
+    static unsigned char interMask[3^dim][2];
+    static void interCombinations(int zeroes, unsigned int indexX, vector<int>tmp, vector<vector<int>>& res);
+    static void findNrecursive(typename Tree<T,dim>::Node*& n, const vector<float>& targetPos, int maxDistanceSq, std::vector<typename Tree<T,dim>::Node**>& v);
 public:
+    NearTree();
+
     std::vector<T>& findNeighbouring(std::vector<T>& v, const vector<float> targetPos, int maxDistance, typename Tree<T,dim>::Iterator it = Tree<T,dim>::root()) const;
 };
 
@@ -170,11 +176,11 @@ typename Tree<T,dim>::Iterator Tree<T,dim>::Iterator::operator++(int){
 }
 
 template<class T, int dim>
-T& Tree<T,dim>::Iterator::operator*(){
+T& Tree<T,dim>::Iterator::operator*()const{
     return *(ptr->data);
 }
 template<class T, int dim>
-T* Tree<T,dim>::Iterator::operator->(){
+T* Tree<T,dim>::Iterator::operator->()const{
     return ptr->data;
 }
 
@@ -357,27 +363,122 @@ typename Tree<T,dim>::Iterator Tree<T,dim>::findNearest(const vector<float>& pos
 }
 
 template<class T, int dim>
+bool Tree<T,dim>::del(){
+    return r!=nullptr && _del(&r);
+}
+template<class T, int dim>
 bool Tree<T,dim>::del(typename Tree<T,dim>::Iterator d){
-    if(d[d.currIndex] == Iterator::pastEnd) return false; //il nodo indicato non c'è
+    return d != Iterator::pastEnd && _del(&(d.ptr->children[d.currIndex]));
+}
+template<class T, int dim>
+bool Tree<T,dim>::_del(Node** i){
+    if(!i || !(*i)) return false;   //non ho nulla da rimuovere
 
-    Node* n = d[d.currIndex].ptr;
+    Node* n = *i;
     //controllo se il nodo da togliere ha figli
     bool hasChildren = false;
     for(unsigned int i=0; i<(2^dim); i++) hasChildren |= n->children[i] != nullptr;
     if(!hasChildren){
         //tolgo il nodo direttamente
-        d.ptr->children[d.currIndex] = nullptr;
+        *i = nullptr;
         delete n;
         return true;
     }
     //scambio con il nodo foglia più vicino nel sottoalbero
     Node** nearestNodePtr;
-    float dist = 2;
+    float dist = 2; //maggiore della massima distanza possibile
     _findNearest(n, n->position, nearestNodePtr, dist, true);
     (*nearestNodePtr)->children = n->children; //il nuovo nodo ha gli stessi figli
-    d.ptr->children[d.currIndex] = *nearestNodePtr; //il padre ora punta a lui
+    *i = *nearestNodePtr; //il padre ora punta a lui
     *nearestNodePtr = nullptr; //rimuovo il vecchio ptr alla foglia
     delete n;
     return true;
 }
+
+//implementazione nearTree
+template<class T, int dim>
+NearTree<T,dim>::NearTree(){
+//costruisco la matrice instersections
+    vector<vector<int>> res;
+    for(int i=3; i>=0; i--) interCombinations(i, 0, vector<int>(dim,0), res); //costruisco tutte le combinazioni con (i) zeri
+    //inserisco
+    for(unsigned int y=0; y<(3^dim); y++){
+        unsigned char nMask = static_cast<unsigned char>(0);
+        unsigned char cMask = static_cast<unsigned char>(0);
+        for(unsigned int x=0; x<dim; x++){
+           intersections[y][x] = res[y][x];
+
+           //neutralizer mask (-1 -> 1, 1 -> 1, 0 -> 0)
+           switch(res[y][x]){
+           case -1: nMask |= 1<<x; break;
+           case  1: nMask |= 1<<x; break;
+           }
+
+           //comparison mask (-1 -> 0, 1 -> 1, 0 -> 0)
+           switch(res[y][x]){
+           case 1: cMask |= 1<<x;  break;
+           }
+        }
+        interMask[y][0] = nMask;
+        interMask[y][1] = cMask;
+    }
+}
+
+template<class T, int dim>
+void interCombinations(int zeroes,unsigned int indexX, vector<int>tmp, vector<vector<int>>& res){
+    if(indexX == dim){
+        res.push_back(tmp); //ho completato una riga, la salvo
+        return;
+    }
+    if(zeroes == dim-indexX){ //devo aggiungere solo zeri per completare la riga
+        tmp[indexX] = 0;
+        return interCombinations<T,dim>(zeroes-1, indexX+1, tmp, res);
+    }
+
+    if(zeroes>0){
+        tmp[indexX]=0;
+        interCombinations<T,dim>(zeroes-1, indexX+1, tmp, res);
+    }
+    tmp[indexX] = -1;   interCombinations<T,dim>(zeroes, indexX+1, tmp, res);
+    tmp[indexX] =  1;   interCombinations<T,dim>(zeroes, indexX+1, tmp, res);
+
+}
+template<class T, int dim>
+void NearTree<T,dim>::findNrecursive(typename Tree<T,dim>::Node*& n, const vector<float>& targetPos, int maxDistanceSq, std::vector<typename Tree<T,dim>::Node**>& v){
+    if(!n)return;
+
+    //controllo tutte le intersezioni in ordine di decrescente connettività, fino a che non ne trovo una che giace a una distanza minore di maxDistance
+    //a quel punto cerco i sottoalberi toccati dall'intersezione e li controllo.
+    unsigned int interIndex = 0;
+    bool found = false;
+    while(!found && interIndex < (3^dim)){
+        float distAcc = 0;
+        for(unsigned int i=0; i< dim; i++){ //calcolo la distanza
+           int interComponent = intersections[interIndex][i];
+           float posComponent = 0;
+
+           if(interComponent == 0) posComponent = n->position[i];
+           else if(interComponent == -1) posComponent = n->bounds[2*i];
+           else posComponent = n->bounds[2*i + 1];
+
+           posComponent -= targetPos[i];
+           distAcc += posComponent * posComponent;
+        }
+
+        if(distAcc < maxDistanceSq) found = true;
+        else interIndex++;
+    }
+    if(found){
+        //trovo sottoalberi corrispondenti
+        for(int c=0; c<(2^dim); c++){
+            unsigned char indexMask = static_cast<unsigned char>(c);
+            indexMask &= interMask[interIndex][0]; //neutralizzo i valori dove in intermask ho 0
+            if(indexMask == interMask[interIndex][1]) //vedo se matcha
+               findNrecursive(n->children[c], targetPos, maxDistanceSq, v); //cerco nel sottoalbero
+        }
+        //mi inserisco in v solo ora perchè voglio che v sia in postordine
+        if(interIndex == 0) v.push_back(&n);    //con indice 0 indico l'intersezione con maggiore connettività ovvero il nodo stesso
+    }
+}
+
 #endif // MODEL_H
