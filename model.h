@@ -1,7 +1,10 @@
 #ifndef MODEL_H
 #define MODEL_H
 #include <vector>
+#include <math.h>
 using std::vector;
+
+template<class T, int dim> class NearTree;
 
 template<class T, int dim> //dim (1..8)
 class Tree{     //albero n-dimensionale di ricerca
@@ -9,6 +12,7 @@ protected:
     class Node{
         friend class Iterator;
         friend class Tree;
+        friend class NearTree<T,dim>;
     protected:
         T* data;    //deve essere allocato nello heap
         Node* setChild(Node* n, int index);
@@ -25,7 +29,7 @@ protected:
         ~Node();       //distruggo anche l'oggetto puntato ma non i figli
     };
 
-    Node r;
+    Node* r;
 
     static Node* copy(Node*);
     static void destroy(Node*);
@@ -35,15 +39,16 @@ protected:
 public:
     class Iterator{
         friend class Tree;
+        friend class NearTree<T,dim>;
     protected:
         Node* ptr;  //nodo<T>
         int currIndex;
     public:
-        static Iterator* pastEnd = Iterator();
+        static Iterator pastEnd;
 
         Iterator();
         Iterator(const Iterator& i);
-        explicit Iterator(const Node& n, int index = 0);
+        explicit Iterator(Node* n, int index = 0);
 
         bool operator==(const Iterator&) const;
         bool operator!=(const Iterator&) const;
@@ -59,41 +64,49 @@ public:
     };
     Iterator root();
 
+    static const int Nchild = pow(2, dim);
+
     Tree();
     Tree(const Tree& t);    //copia profonda
     Tree& operator=(const Tree& t); //assegnazione profonda
 
-    Iterator insert(const T& t, const vector<float> newPos);
+    Iterator insert(T* t, const vector<float> newPos);
     Iterator insert(const Iterator& t);        //sposto un nodo(anche da un altro albero)
 
     template<class Lambda>
-    void detach(const Tree& dest, Lambda fn); //stacca tutto l'albero
+    void detach(Tree& dest, Lambda fn); //stacca tutto l'albero
     template<class Lambda>
-    static void detach(const Iterator& t, const Tree& dest, Lambda fn); //stacca un sottoalbero s da t[s], applica la lambda sui nodi e li inserisce in un altro albero, fn deve ritornare una nuova position per il nodo
+    static void detach(Iterator t, Tree& dest, Lambda fn); //stacca un sottoalbero s da t[s], applica la lambda sui nodi e li inserisce in un altro albero, fn deve ritornare una nuova position per il nodo
 
-    Iterator findNearest(const vector<float>& position )const;  //ritorna pastEnd se l'albero è vuoto o contiene un elemento nell'esatta posizione
+    Iterator findNearest(const vector<float>& position );  //ritorna pastEnd se l'albero è vuoto o contiene un elemento nell'esatta posizione
+
+    // attenzione con i metodi delete, se un iteratore puntava a un nodo che viene tolto, dereferenziandolo dà segFault
     bool del(); //toglie la radice
     bool del(Iterator d);   //toglie il nodo puntato da d[currIndex]
 
     ~Tree();    //distruzione profonda
 };
+template<class T, int dim> typename Tree<T,dim>::Iterator Tree<T,dim>::Iterator::pastEnd = Tree<T,dim>::Iterator();
 
 template<class T, int dim>
 class NearTree : public Tree<T, dim>{
+public: static const int Nintersec = pow(3, dim);
 protected:
     static bool singleConstructed;
-    static float intersections[3^dim][dim]; //definisce tutte le intersezioni tra gli spazi dei figli, ordinate per connettività decrescente (-1, 0 per coordinate condivise, 1)
-    static unsigned char interMask[3^dim][2];
+    static float intersections[Nintersec][dim]; //definisce tutte le intersezioni tra gli spazi dei figli, ordinate per connettività decrescente (-1, 0 per coordinate condivise, 1)
+    static unsigned char interMask[Nintersec][2];
 
-    static void interCombinations(int zeroes, unsigned int indexX, vector<int>tmp, vector<vector<int>>& res);
-    static void findNrecursive(typename Tree<T,dim>::Node*& n, const vector<float>& targetPos, int maxDistanceSq, std::vector<typename Tree<T,dim>::Node**>& v);
+    static void interCombinations(unsigned int zeroes, unsigned int indexX, vector<int> tmp, vector<vector<int>>& res);
+    static void findNrecursive(typename Tree<T,dim>::Node*& n, const vector<float>& targetPos, float maxDistanceSq, std::vector<typename Tree<T,dim>::Node**>& v);
 public:
     NearTree(); //costruisce solo la prima volta i membri statici per questa istanza di NearTree
 
-    void findNeighbouring(typename Tree<T,dim>::Iterator target, int maxDistanceSq, std::vector<T*>& v) const;
-    void deleteNeighbouring(const vector<float>& targetPos, int maxDistance);
+    void findNeighbouring(typename Tree<T,dim>::Iterator target, float maxDistanceSq, std::vector<T*>& v);
+    void deleteNeighbouring(const vector<float>& targetPos, float maxDistanceSq);
 };
 template<class T, int dim> bool NearTree<T,dim>::singleConstructed = false;
+template<class T, int dim> float NearTree<T,dim>::intersections[NearTree::Nintersec][dim];
+template<class T, int dim> unsigned char NearTree<T,dim>::interMask[NearTree::Nintersec][2];
 
 class Particle2{
 public:
@@ -128,21 +141,26 @@ class corrosive : public virtual Particle2{};
 
 //implementazione Node
 template<class T, int dim>
-Tree<T,dim>::Node::Node():position(dim,0), data(nullptr), children( 2^dim, nullptr), bounds(2*dim, 0) { }
+Tree<T,dim>::Node::Node(): data(nullptr), children( Nchild, nullptr), bounds(2*dim, 0) , position(dim,0){ }
 template<class T, int dim>
-Tree<T,dim>::Node::Node(const Node& n): position(n.position), data(new T(*n.data)), children(n.children), bounds(n.bounds){  }
+Tree<T,dim>::Node::Node(const Node& n): data(new T(*n.data)), children(n.children), bounds(n.bounds), position(n.position){  }
 template<class T, int dim>
-Tree<T,dim>::Node::Node(T* d, vector<float> pos):position(pos), data(d), children(2^dim, nullptr), bounds(2*dim, 0) {}
+Tree<T,dim>::Node::Node(T* d, vector<float> pos):data(d), children(Nchild, nullptr), bounds(2*dim, 0), position(pos) {}
 template<class T, int dim>
 typename Tree<T,dim>::Node& Tree<T,dim>::Node::operator =(const typename Tree<T,dim>::Node& n){
     position = n.position;
     data = new T(*n.data);
     children(dim, nullptr);
-    bounds(2*dim, 0);
+    bounds(n->bounds);
     return *this;
 }
 template<class T, int dim>
 Tree<T,dim>::Node::~Node(){delete data;}
+template<class T, int dim>
+typename Tree<T,dim>::Node* Tree<T,dim>::Node::setChild(Node* n, int index){
+   children[index] = n;
+   return n;
+}
 
 //implementazione Tree::Iterator
 template<class T, int dim>
@@ -150,7 +168,7 @@ Tree<T,dim>::Iterator::Iterator() : ptr(nullptr), currIndex(0){}
 template<class T, int dim>
 Tree<T,dim>::Iterator::Iterator(const Iterator& i) : ptr(i.ptr), currIndex(i.currIndex){}
 template<class T, int dim>
-Tree<T,dim>::Iterator::Iterator(const Node& n, int index) : ptr(&n), currIndex(index){}
+Tree<T,dim>::Iterator::Iterator(Node* n, int index) : ptr(n), currIndex(index){}
 
 template<class T, int dim>
 bool Tree<T,dim>::Iterator::operator==(const typename Tree<T,dim>::Iterator& it) const{return ptr==it.ptr && (ptr==nullptr || currIndex==it.currIndex);}
@@ -199,9 +217,9 @@ typename Tree<T,dim>::Iterator& Tree<T,dim>::Iterator::operator=(const Iterator&
 
 //implementazione albero
 template<class T, int dim>
-typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const T &t, const vector<float> newPos)
+typename Tree<T,dim>::Iterator Tree<T,dim>::insert(T* t, const vector<float> newPos)
 {
-    Node* n = new Node(&t, newPos);
+    Node* n = new Node(t, newPos);
     return insert(Iterator(n));
 }
 template<class T, int dim>
@@ -210,7 +228,7 @@ typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const Iterator& t){
     Iterator p = root();
 
     //inizializzo i bounds
-    vector<float> standardBounds;
+    vector<float> standardBounds(2*dim, 0);
     for(unsigned int i=0; i<2*dim; i+=2){
        standardBounds[i] = 0.0f;
        standardBounds[i+1] = 1.0f;
@@ -231,7 +249,7 @@ typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const Iterator& t){
         index=0;
         for(int i=0; i<dim;i++)
            if(n->position[i] > p.ptr->position[i])
-              index += 2^i; //se sono strettamente maggiore al pivot nella dimensione considerata setto la bitmask in modo da puntare il figlio corretto
+              index += pow(2, i); //se sono strettamente maggiore al pivot nella dimensione considerata setto la bitmask in modo da puntare il figlio corretto
         nP = p[index]; //seleziono il sottoalbero
     }
 
@@ -257,7 +275,7 @@ typename Tree<T,dim>::Node* Tree<T,dim>::copy(Node* r){
     if(!r)return nullptr;
 
     Node* n = new Node(r);
-    for(int i=0; i<(2^dim); i++){
+    for(int i=0; i<(Nchild); i++){
         n->children[i] = copy(r->children[i]);
     }
     return n;
@@ -266,7 +284,7 @@ template<class T, int dim>
 void Tree<T,dim>::destroy(Node* r){
    if(!r)return;
 
-   for(int i=0; i<(2^dim); i++){
+   for(int i=0; i<(Nchild); i++){
        destroy(r->children[i]);
    }
    delete r;
@@ -283,7 +301,7 @@ Tree<T,dim>& Tree<T,dim>::operator=(const Tree<T,dim>& t){
 }
 template<class T, int dim>
 Tree<T,dim>::~Tree(){
-    detroy(r);
+    destroy(r);
 }
 
 template<class T, int dim>
@@ -293,9 +311,9 @@ typename Tree<T,dim>::Iterator Tree<T,dim>::root(){
 
 template<class T, int dim>
 template<class Lambda>
-void Tree<T,dim>::detach(const Tree& dest, Lambda fn){
+void Tree<T,dim>::detach(Tree& dest, Lambda fn){
     Iterator curr = root();
-    for(int i=0; i<(2^dim); i++){
+    for(int i=0; i<(Nchild); i++){
         curr.currIndex = i;
         detach(curr, dest, fn);
     }
@@ -305,7 +323,7 @@ void Tree<T,dim>::detach(const Tree& dest, Lambda fn){
 }
 template<class T, int dim>
 template<class Lambda>
-void Tree<T,dim>::detach(const Iterator& t, const Tree& dest, Lambda fn){
+void Tree<T,dim>::detach(Iterator t, Tree& dest, Lambda fn){
     if(t == Iterator::pastEnd )return;
     Iterator curr = t[t.currIndex];
     if(curr == Iterator::pastEnd) return;
@@ -313,7 +331,7 @@ void Tree<T,dim>::detach(const Iterator& t, const Tree& dest, Lambda fn){
     //prima stacco i figli poi il sottoalbero
     int startIndex = curr.currIndex;
     curr.currIndex=0;
-    for(int i=0; i<(2^dim); i++){
+    for(int i=0; i<(Nchild); i++){
        curr.currIndex = i;
        detach(curr, dest, fn);
     }
@@ -329,11 +347,11 @@ bool Tree<T,dim>::_findNearest(Node*& n, const vector<float>& pos, Node**& curr,
 
     bool skip = false;
     if(onlyLeaves) //se ho almeno un figlio skippo
-        for(unsigned int i=0; i<(2^dim); i++) skip |= n->children[i] != nullptr;
+        for(unsigned int i=0; i<(Nchild); i++) skip |= n->children[i] != nullptr;
     if(!skip){
     //controllo la mia distanza quadratica
         float sqDist = 0;
-        for(int i=0; i<dim; i++) sqDist += (n->position[i] - pos[i])^2;
+        for(int i=0; i<dim; i++) sqDist += (n->position[i] - pos[i]) * (n->position[i] - pos[i]);
         if(sqDist != 0.0f && sqDist < currSqDistance){ //se la distanza è 0 sono proprio sul nodo
             curr = &n;
             currSqDistance = sqDist;
@@ -342,7 +360,7 @@ bool Tree<T,dim>::_findNearest(Node*& n, const vector<float>& pos, Node**& curr,
         }
     }
     //stimo la minima distanza quadratica di un sottoalbero dai suoi bounds, per capire se continuare la ricerca
-    for(unsigned int c=0; c<(2^dim); c++){ //ogni sottoalbero
+    for(unsigned int c=0; c<(Nchild); c++){ //ogni sottoalbero
         Node* child = n->children[c];
         if(child){ //ho il figlio da analizzare
 
@@ -359,7 +377,7 @@ bool Tree<T,dim>::_findNearest(Node*& n, const vector<float>& pos, Node**& curr,
     return retVal;
 }
 template<class T, int dim>
-typename Tree<T,dim>::Iterator Tree<T,dim>::findNearest(const vector<float>& position )const{
+typename Tree<T,dim>::Iterator Tree<T,dim>::findNearest(const vector<float>& position ){
     Node** nearestNodePtr;
     float maxDistance = 2;  //maggiore della massima distanza possibile (sqrt(2))
     bool found = _findNearest(r, position, nearestNodePtr, maxDistance, false);
@@ -383,7 +401,7 @@ bool Tree<T,dim>::_del(Node** i){
     Node* n = *i;
     //controllo se il nodo da togliere ha figli
     bool hasChildren = false;
-    for(unsigned int i=0; i<(2^dim); i++) hasChildren |= n->children[i] != nullptr;
+    for(unsigned int i=0; i<(Nchild); i++) hasChildren |= n->children[i] != nullptr;
     if(!hasChildren){
         //tolgo il nodo direttamente
         *i = nullptr;
@@ -411,7 +429,7 @@ NearTree<T,dim>::NearTree(){
     vector<vector<int>> res;
     for(int i=3; i>=0; i--) interCombinations(i, 0, vector<int>(dim,0), res); //costruisco tutte le combinazioni con (i) zeri
     //inserisco
-    for(unsigned int y=0; y<(3^dim); y++){
+    for(unsigned int y=0; y<Nintersec; y++){
         unsigned char nMask = static_cast<unsigned char>(0);
         unsigned char cMask = static_cast<unsigned char>(0);
         for(unsigned int x=0; x<dim; x++){
@@ -434,33 +452,33 @@ NearTree<T,dim>::NearTree(){
 }
 
 template<class T, int dim>
-void interCombinations(int zeroes,unsigned int indexX, vector<int>tmp, vector<vector<int>>& res){
+void NearTree<T,dim>::interCombinations(unsigned int zeroes, unsigned int indexX, vector<int> tmp, vector<vector<int>>& res){
     if(indexX == dim){
         res.push_back(tmp); //ho completato una riga, la salvo
         return;
     }
     if(zeroes == dim-indexX){ //devo aggiungere solo zeri per completare la riga
         tmp[indexX] = 0;
-        return interCombinations<T,dim>(zeroes-1, indexX+1, tmp, res);
+        return interCombinations(zeroes-1, indexX+1, tmp, res);
     }
 
     if(zeroes>0){
         tmp[indexX]=0;
-        interCombinations<T,dim>(zeroes-1, indexX+1, tmp, res);
+        interCombinations(zeroes-1, indexX+1, tmp, res);
     }
-    tmp[indexX] = -1;   interCombinations<T,dim>(zeroes, indexX+1, tmp, res);
-    tmp[indexX] =  1;   interCombinations<T,dim>(zeroes, indexX+1, tmp, res);
+    tmp[indexX] = -1;   interCombinations(zeroes, indexX+1, tmp, res);
+    tmp[indexX] =  1;   interCombinations(zeroes, indexX+1, tmp, res);
 
 }
 template<class T, int dim>
-void NearTree<T,dim>::findNrecursive(typename Tree<T,dim>::Node*& n, const vector<float>& targetPos, int maxDistanceSq, std::vector<typename Tree<T,dim>::Node**>& v){
+void NearTree<T,dim>::findNrecursive(typename Tree<T,dim>::Node*& n, const vector<float>& targetPos, float maxDistanceSq, std::vector<typename Tree<T,dim>::Node**>& v){
     if(!n)return;
 
     //controllo tutte le intersezioni in ordine di decrescente connettività, fino a che non ne trovo una che giace a una distanza minore di maxDistance
     //a quel punto cerco i sottoalberi toccati dall'intersezione e li controllo.
     unsigned int interIndex = 0;
     bool found = false;
-    while(!found && interIndex < (3^dim)){
+    while(!found && interIndex < Nintersec){
         float distAcc = 0;
         for(unsigned int i=0; i< dim; i++){ //calcolo la distanza
            int interComponent = intersections[interIndex][i];
@@ -479,7 +497,7 @@ void NearTree<T,dim>::findNrecursive(typename Tree<T,dim>::Node*& n, const vecto
     }
     if(found){
         //trovo sottoalberi corrispondenti
-        for(int c=0; c<(2^dim); c++){
+        for(int c=0; c< Tree<T,dim>::Nchild; c++){
             unsigned char indexMask = static_cast<unsigned char>(c);
             indexMask &= interMask[interIndex][0]; //neutralizzo i valori dove in intermask ho 0
             if(indexMask == interMask[interIndex][1]) //vedo se matcha
@@ -491,11 +509,11 @@ void NearTree<T,dim>::findNrecursive(typename Tree<T,dim>::Node*& n, const vecto
 }
 
 template<class T, int dim>
-void NearTree<T,dim>::findNeighbouring(typename Tree<T,dim>::Iterator target, int maxDistanceSq, std::vector<T*>& v)const{
+void NearTree<T,dim>::findNeighbouring(typename Tree<T,dim>::Iterator target, float maxDistanceSq, std::vector<T*>& v){
     typename Tree<T,dim>::Node*& n = target.ptr;
 
     vector<typename Tree<T,dim>::Node**> t; //conterrà i nodi da eliminare partendo dalle foglie, in modo da avere meno nodi da spostare
-    findNrecursive(n, n->position, maxDistanceSq, t); //attenzione: n non è il vero riferimento al field child del padre
+    findNrecursive(Tree<T,dim>::r, Tree<T,dim>::r->position, maxDistanceSq, t);
 
     for(auto it=t.begin(); it!=t.end(); it++){
         if(*(*it) != n){    //escludo il nodo passato per parametro
@@ -504,7 +522,7 @@ void NearTree<T,dim>::findNeighbouring(typename Tree<T,dim>::Iterator target, in
     }
 }
 template<class T, int dim>
-void NearTree<T,dim>::deleteNeighbouring(const vector<float>& targetPos, int maxDistanceSq){
+void NearTree<T,dim>::deleteNeighbouring(const vector<float>& targetPos, float maxDistanceSq){
     vector<typename Tree<T,dim>::Node**> v; //conterrà i nodi da eliminare partendo dalle foglie, in modo da avere meno nodi da spostare
     findNrecursive(Tree<T,dim>::r, targetPos, maxDistanceSq, v);
 
