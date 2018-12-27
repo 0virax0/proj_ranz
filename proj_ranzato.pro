@@ -27,11 +27,13 @@ CONFIG += c++11
 SOURCES += \
         main.cpp \
         view.cpp \
-    model.cpp
+    model.cpp \
+    serializer.cpp
 
 HEADERS += \
         view.h \
-    model.h
+    model.h \
+    serializer.h
 
 FORMS += \
         mainwindow.ui

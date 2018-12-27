@@ -2,6 +2,8 @@
 #define MODEL_H
 #include <vector>
 #include <math.h>
+#include <QString>
+#include <QXmlStreamWriter>
 using std::vector;
 
 template<class T, int dim> class NearTree;
@@ -112,18 +114,23 @@ class Particle2{
 public:
    class Properties{
    public:
-        float position[2];
-        float velocity[2];
+        vector<float> position;
+        vector<float> velocity;
         float pressure;
         float temperature;
+
+        Properties();
+        Properties(const Properties& p);
    };
    Properties* properties;
 
    virtual void advect(std::vector<Particle2>)=0;
    virtual bool swapState();
+   virtual bool serialize(QXmlStreamWriter&);
 
    Particle2(); //create properties in the heap
    Particle2(const Particle2&);
+   Particle2(QXmlStreamReader&); //create from deserialization
    virtual ~Particle2();
 
 protected:
@@ -132,7 +139,11 @@ protected:
 };
 
 class solid : public virtual Particle2{
-   virtual void advect(std::vector<Particle2>);
+public:
+   void advect(std::vector<Particle2>) override;
+   bool serialize(QXmlStreamWriter&) override;
+
+   solid(QXmlStreamReader&);
 };
 class liquid : public virtual Particle2{};
 class gas : public virtual Particle2{};
