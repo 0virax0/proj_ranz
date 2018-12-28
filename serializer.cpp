@@ -18,8 +18,10 @@ bool Serializer::serializeTree(Tree<Particle2, 2> &tree)
     xmlWriter.setAutoFormatting(true);
     xmlWriter.writeStartDocument();
     //percorro l'albero e lo serializzo
+    xmlWriter.writeStartElement("Particles");
     bool serState = _serialize(tree.root(), xmlWriter);
 
+    xmlWriter.writeEndElement();
     xmlWriter.writeEndDocument();
     file.close();
     if (file.error() || serState) {
@@ -55,8 +57,8 @@ bool DeSerializer::deSerializeTree(Tree<Particle2, 2>& destination){
     QXmlStreamReader xmlReader(&file);
     while(!xmlReader.atEnd() && !xmlReader.hasError()) {
         if(xmlReader.readNext() == QXmlStreamReader::StartElement){
-            if( xmlReader.name() == "solid") {
-                Particle2* p = new solid(xmlReader);
+            if( xmlReader.name() == "Ice") {    //controllo il tag e decido quale particella costruire
+                Particle2* p = new Ice(xmlReader);
                 destination.insert(p, p->properties->position);
             }
         }

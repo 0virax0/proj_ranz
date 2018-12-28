@@ -5,24 +5,47 @@
 #include "model.h"
 using std::vector;
 
+template<class T, int d> class D;
+template<class T, int d>
+class B{
+    public:
+    class subClass{
+        friend class D<T,d>;
+        subClass* s;};
+    subClass sub;
+    void insert(){
+        std::cout << "insert" << std::endl;
+    }
+    B();
+};
+
+template<class T, int d>
+class D : public B<T,d>{
+public:
+    static bool v;
+    static float f;
+    static void fun();
+    D(){
+        if(!v){
+            v=true;
+            f=1;
+        }
+    }
+};
+template<class T,int d> bool D<T,d>::v = 0;
+
+template class D<int,2>;
+template class NearTree<int,2>;
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
     /*MainWindow w;
     w.show();*/
 
-    NearTree<int, 3> t;
-    vector<float> v {0.5, 0.5, 0.5};
-    int* val = new int(95);
-    int* val1 = new int(90);
-    t.insert(val, v);
-    v[0] = 0;
-    t.insert(val1, v);
-    auto it = t.root();
-    auto it1 = it[0];
-
-    NearTree<int, 3> t1;
-    t.detach(t1, [&v](decltype (it) i)->vector<float>{(*i) += 1; return v;});
-int i=0;
+    NearTree<int, 2> tr;
+    NearTree<int,2>::Iterator;
+    tr.insert(new int(0), {0,0,0});
+    D<int,2> var;
+    var.insert();
    //return a.exec();
 }

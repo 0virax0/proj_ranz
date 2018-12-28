@@ -7,6 +7,7 @@
 using std::vector;
 
 template<class T, int dim> class NearTree;
+class Particle2;
 
 template<class T, int dim> //dim (1..8)
 class Tree{     //albero n-dimensionale di ricerca
@@ -75,7 +76,7 @@ public:
     Iterator insert(T* t, const vector<float> newPos);
     Iterator insert(const Iterator& t);        //sposto un nodo(anche da un altro albero)
 
-    template<class Lambda>
+    template<class Lambda>  //la lambda deve accettare una ref a il proprio puntatore nel suo nodo e deve restituire una nuova posizione
     void detach(Tree& dest, Lambda fn); //stacca tutto l'albero
     template<class Lambda>
     static void detach(Iterator t, Tree& dest, Lambda fn); //stacca un sottoalbero s da t[s], applica la lambda sui nodi e li inserisce in un altro albero, fn deve ritornare una nuova position per il nodo
@@ -89,6 +90,7 @@ public:
     ~Tree();    //distruzione profonda
 };
 template<class T, int dim> typename Tree<T,dim>::Iterator Tree<T,dim>::Iterator::pastEnd = Tree<T,dim>::Iterator();
+template class Tree<Particle2,2>;
 
 template<class T, int dim>
 class NearTree : public Tree<T, dim>{
@@ -116,39 +118,97 @@ public:
    public:
         vector<float> position;
         vector<float> velocity;
+        float mass;
         float pressure;
         float temperature;
 
         Properties();
+        Properties(const vector<float>& pos, const vector<float>& vel, float m, float p, float t);
         Properties(const Properties& p);
    };
    Properties* properties;
 
+   Particle2* substitute; //segnala che occorre sostituire la particella con quella puntata
+
    virtual void advect(std::vector<Particle2>)=0;
-   virtual bool swapState();
+   bool swapState();
    virtual bool serialize(QXmlStreamWriter&);
 
    Particle2(); //create properties in the heap
+   Particle2(const vector<float>& pos, const vector<float>& vel, float m, float p, float t);
    Particle2(const Particle2&);
    Particle2(QXmlStreamReader&); //create from deserialization
    virtual ~Particle2();
 
 protected:
    Properties* newProperties;
-
 };
 
-class solid : public virtual Particle2{
+class Solid : public virtual Particle2{
 public:
+   float friction;
+
    void advect(std::vector<Particle2>) override;
    bool serialize(QXmlStreamWriter&) override;
 
-   solid(QXmlStreamReader&);
+   Solid(float fric);
+   Solid(QXmlStreamReader&);
 };
-class liquid : public virtual Particle2{};
-class gas : public virtual Particle2{};
-class explosive : public virtual Particle2{};
-class corrosive : public virtual Particle2{};
+class Liquid : public virtual Particle2{};
+class Gas : public virtual Particle2{};
+class Explosive : public virtual Particle2{};
+
+//classi concrete
+class Water : public Liquid{
+public:
+    static const vector<float> color;
+
+    void advect(std::vector<Particle2>) override;
+    bool serialize(QXmlStreamWriter&) override;
+
+    Water(const vector<float>& pos);
+    Water(QXmlStreamReader&);
+};
+class Ice : public Solid{
+public:
+    static const vector<float> color;
+
+    void advect(std::vector<Particle2>) override;
+    bool serialize(QXmlStreamWriter&) override;
+
+    Ice(const vector<float>& pos);
+    Ice(QXmlStreamReader&);
+};
+class Steam : public Gas{
+public:
+    static const vector<float> color;
+
+    void advect(std::vector<Particle2>) override;
+    bool serialize(QXmlStreamWriter&) override;
+
+    Steam(const vector<float>& pos);
+    Steam(QXmlStreamReader&);
+};
+
+//Model
+class Model{
+public:
+    using tree = NearTree<Particle2, 2>;
+    enum particle_type {
+        Water, Ice, Steam
+    };
+    tree* container;
+
+    bool insert(const vector<float>& pos, particle_type t); //inserisco in posizione cartesiana particelle di tipo t
+    bool update();
+
+    Model();
+    ~Model();
+private:
+    tree* next_container;
+
+    static bool _update(Tree<Particle2,2>::Iterator it);
+};
 
 //implementazione Node
 template<class T, int dim>
@@ -329,7 +389,7 @@ void Tree<T,dim>::detach(Tree& dest, Lambda fn){
         detach(curr, dest, fn);
     }
     r = nullptr;
-    curr.ptr->position = fn(curr);
+    curr.ptr->position = fn(curr.ptr);
     dest.insert(curr);
 }
 template<class T, int dim>
@@ -347,7 +407,7 @@ void Tree<T,dim>::detach(Iterator t, Tree& dest, Lambda fn){
        detach(curr, dest, fn);
     }
     t.ptr->children[startIndex]=nullptr;
-    curr.ptr->position = fn(curr);
+    curr.ptr->position = fn(curr.ptr);
     dest.insert(curr);
 }
 
@@ -433,32 +493,33 @@ bool Tree<T,dim>::_del(Node** i){
 //implementazione nearTree
 template<class T, int dim>
 NearTree<T,dim>::NearTree(){
-    if(singleConstructed) return;
-    singleConstructed = true;
+    if(!singleConstructed) {
+        singleConstructed = true;
 
-//costruisco la matrice instersections
-    vector<vector<int>> res;
-    for(int i=3; i>=0; i--) interCombinations(i, 0, vector<int>(dim,0), res); //costruisco tutte le combinazioni con (i) zeri
-    //inserisco
-    for(unsigned int y=0; y<Nintersec; y++){
-        unsigned char nMask = static_cast<unsigned char>(0);
-        unsigned char cMask = static_cast<unsigned char>(0);
-        for(unsigned int x=0; x<dim; x++){
-           intersections[y][x] = res[y][x];
+        //costruisco la matrice instersections
+        vector<vector<int>> res;
+        for(int i=3; i>=0; i--) interCombinations(i, 0, vector<int>(dim,0), res); //costruisco tutte le combinazioni con (i) zeri
+        //inserisco
+        for(unsigned int y=0; y<Nintersec; y++){
+            unsigned char nMask = static_cast<unsigned char>(0);
+            unsigned char cMask = static_cast<unsigned char>(0);
+            for(unsigned int x=0; x<dim; x++){
+                intersections[y][x] = res[y][x];
 
-           //neutralizer mask (-1 -> 1, 1 -> 1, 0 -> 0)
-           switch(res[y][x]){
-           case -1: nMask |= 1<<x; break;
-           case  1: nMask |= 1<<x; break;
-           }
+                //neutralizer mask (-1 -> 1, 1 -> 1, 0 -> 0)
+                switch(res[y][x]){
+                case -1: nMask |= 1<<x; break;
+                case  1: nMask |= 1<<x; break;
+                }
 
-           //comparison mask (-1 -> 0, 1 -> 1, 0 -> 0)
-           switch(res[y][x]){
-           case 1: cMask |= 1<<x;  break;
-           }
+                //comparison mask (-1 -> 0, 1 -> 1, 0 -> 0)
+                switch(res[y][x]){
+                case 1: cMask |= 1<<x;  break;
+                }
+            }
+            interMask[y][0] = nMask;
+            interMask[y][1] = cMask;
         }
-        interMask[y][0] = nMask;
-        interMask[y][1] = cMask;
     }
 }
 
