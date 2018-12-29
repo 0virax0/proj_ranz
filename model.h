@@ -134,8 +134,9 @@ public:
 
    Particle2* substitute; //segnala che occorre sostituire la particella con quella puntata
 
-   virtual void advect(std::vector<Particle2>)=0;
+   virtual void advect(std::vector<Particle2*>)=0;
    bool swapState();
+   virtual vector<float> getColor()=0;
    virtual bool serialize(QXmlStreamWriter&);
 
    Particle2(); //create properties in the heap
@@ -152,7 +153,7 @@ class Solid : public virtual Particle2{
 public:
    float friction;
 
-   void advect(std::vector<Particle2>) override;
+   void advect(std::vector<Particle2*>) override;
    bool serialize(QXmlStreamWriter&) override;
 
    Solid(float fric);
@@ -165,9 +166,9 @@ class Explosive : public virtual Particle2{};
 //classi concrete
 class Water : public Liquid{
 public:
-    static const vector<float> color;
+    static vector<float> color;
 
-    void advect(std::vector<Particle2>) override;
+    void advect(std::vector<Particle2*>) override;
     bool serialize(QXmlStreamWriter&) override;
 
     Water(const vector<float>& pos);
@@ -175,19 +176,21 @@ public:
 };
 class Ice : public Solid{
 public:
-    static const vector<float> color;
+    static vector<float> color;
 
-    void advect(std::vector<Particle2>) override;
+    void advect(std::vector<Particle2*>) override;
+    vector<float> getColor() override;
     bool serialize(QXmlStreamWriter&) override;
 
     Ice(const vector<float>& pos);
     Ice(QXmlStreamReader&);
+    ~Ice() override;
 };
 class Steam : public Gas{
 public:
-    static const vector<float> color;
+    static vector<float> color;
 
-    void advect(std::vector<Particle2>) override;
+    void advect(std::vector<Particle2*>) override;
     bool serialize(QXmlStreamWriter&) override;
 
     Steam(const vector<float>& pos);
@@ -204,14 +207,15 @@ public:
     tree* container;
 
     bool insert(const vector<float>& pos, particle_type t); //inserisco in posizione cartesiana particelle di tipo t
-    bool update();
+    template<class Lambda>  //outParticle prende un puntatore a Particle2 grazie al quale può leggere lo stato di ogni particella nel container
+    bool update(Lambda outParticle);
 
     Model();
     ~Model();
 private:
     tree* next_container;
 
-    static bool _update(Tree<Particle2,2>::Iterator it);
+    static bool _update(Tree<Particle2,2>::Iterator it, tree* cont);
 };
 
 //implementazione Node
@@ -411,7 +415,7 @@ void Tree<T,dim>::detach(Iterator t, Tree& dest, Lambda fn){
        detach(curr, dest, fn);
     }
     t.ptr->children[startIndex]=nullptr;
-    curr.ptr->position = fn(curr.ptr);
+    curr.ptr->position = fn(curr.ptr->data);
     dest.insert(curr);
 }
 

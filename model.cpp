@@ -14,15 +14,47 @@ bool Model::insert(const vector<float> &pos, Model::particle_type t) {
     case Ice: container->insert(new class Ice(pos), pos); break;
     case Steam: container->insert(new class Steam(pos), pos); break;
     }
+    return true;
 }
 
-bool Model::update() {
+template<class Lambda>
+bool Model::update(Lambda outParticle){
+    //faccio l'advection in ogni particella
+    _update(container->root(), container);
 
+    //faccio il detach chiamando anche outParticle
+    container->detach(*next_container,
+                      [&outParticle](Particle2*& thisParticle)->vector<float>{
+                           thisParticle->swapState();   //le nuove proprietà vengono portate su
+                           if(thisParticle->substitute != nullptr) {    //sostituisco con la nuova particella se serve
+                               Particle2* old = thisParticle;
+                               thisParticle = thisParticle->substitute;
+                               delete old;
+                           }
+                           outParticle(thisParticle);   //invoco la funzione che utilizza le particle aggiornate nella View
+                           return thisParticle->properties->position;
+                      } );
+
+    //porto su il nuovo albero aggiornato
+   auto tmp = container;
+   container = next_container;
+   next_container = tmp;
+
+   return true;
 }
 
-bool Model::_update(Tree<Particle2,2>::Iterator it)
-{
+bool Model::_update(Tree<Particle2,2>::Iterator it, tree* cont) {
+    if(it == decltype (it)::pastEnd) return true;
+    bool retVal=true;
 
+    vector<Particle2*> neighbours;
+    cont->findNeighbouring(it, 0.1f, neighbours);   //trovo i vicini
+    it->advect(neighbours); //faccio advection a partire dalle mie properties e quelle dei vicini
+
+    //ripeto per i sottoalberi
+   for (int i=0; i< Tree<Particle2,2>::Nchild; i++)
+       retVal &= _update(it[i], cont);
+   return retVal;
 }
 
 //implementazione Particle2
@@ -80,7 +112,7 @@ Solid::Solid(QXmlStreamReader& xml): Particle2 (xml){
    //letture aggiuntive per finire la costruzione di solid
     if(xml.readNextStartElement() && xml.name() == "friction") friction = xml.readElementText().toFloat();
 }
-void Solid::advect(std::vector<Particle2>) {
+void Solid::advect(std::vector<Particle2*>) {
 
 }
 bool Solid::serialize(QXmlStreamWriter& xml) {
@@ -92,10 +124,15 @@ bool Solid::serialize(QXmlStreamWriter& xml) {
 }
 
 //implementazione ice
-const vector<float> Ice::color{0.3f, 0.3f, 1.0f};
+vector<float> Ice::color{0.3f, 0.3f, 1.0f};
 Ice::Ice(const vector<float>& pos): Particle2 (pos, {0.0f, 0.0f, 0.0f}, 0.93f, 0.0f, -1.0f), Solid (0.04f){}
 Ice::Ice(QXmlStreamReader& xml): Particle2 (xml), Solid(xml){/*letture aggiuntive*/ }
+Ice::~Ice() {}
 
+void Ice::advect(std::vector<Particle2*>) {}
+vector<float> Ice::getColor(){
+    return color;
+}
 bool Ice::serialize(QXmlStreamWriter& xml){
     xml.writeStartElement("Ice");
     Solid::serialize(xml);
