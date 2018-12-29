@@ -8,12 +8,6 @@ Model::~Model(){
 }
 
 bool Model::insert(const vector<float> &pos, Model::particle_type t) {
-    Tree<class Particle2,2>* cont = new NearTree<class Particle2,2>;
-    NearTree<int,3> a;
-    NearTree<int,3> b;
-    a.insert({0,0,0},0);
-    a.insert({0,0,0},0);
-    b.insert({0,0,0},0);
    //inserisco una sola particella
     switch(t){
     case Water: container->insert(new class Water(pos), pos); break;

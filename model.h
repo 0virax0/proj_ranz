@@ -6,8 +6,11 @@
 #include <QXmlStreamWriter>
 using std::vector;
 
+constexpr int ipow(int n, int pow){ //potenze di interi a compile time
+    return pow == 0 ? 1 : n * ipow(n, pow-1);
+}
+
 template<class T, int dim> class NearTree;
-class Particle2;
 
 template<class T, int dim> //dim (1..8)
 class Tree{     //albero n-dimensionale di ricerca
@@ -67,7 +70,7 @@ public:
     };
     Iterator root();
 
-    static const int Nchild = pow(2, dim);
+    static int Nchild;
 
     Tree();
     Tree(const Tree& t);    //copia profonda
@@ -90,15 +93,15 @@ public:
     ~Tree();    //distruzione profonda
 };
 template<class T, int dim> typename Tree<T,dim>::Iterator Tree<T,dim>::Iterator::pastEnd = Tree<T,dim>::Iterator();
-template class Tree<Particle2,2>;
+template<class T, int dim> int Tree<T,dim>::Nchild = ipow(2,dim);
 
 template<class T, int dim>
 class NearTree : public Tree<T, dim>{
-public: static const int Nintersec = pow(3, dim);
+public: static int Nintersec;
 protected:
     static bool singleConstructed;
-    static float intersections[Nintersec][dim]; //definisce tutte le intersezioni tra gli spazi dei figli, ordinate per connettività decrescente (-1, 0 per coordinate condivise, 1)
-    static unsigned char interMask[Nintersec][2];
+    static float intersections[ipow(3,dim)][dim]; //definisce tutte le intersezioni tra gli spazi dei figli, ordinate per connettività decrescente (-1, 0 per coordinate condivise, 1)
+    static unsigned char interMask[ipow(3,dim)][2];
 
     static void interCombinations(unsigned int zeroes, unsigned int indexX, vector<int> tmp, vector<vector<int>>& res);
     static void findNrecursive(typename Tree<T,dim>::Node*& n, const vector<float>& targetPos, float maxDistanceSq, std::vector<typename Tree<T,dim>::Node**>& v);
@@ -109,8 +112,9 @@ public:
     void deleteNeighbouring(const vector<float>& targetPos, float maxDistanceSq);
 };
 template<class T, int dim> bool NearTree<T,dim>::singleConstructed = false;
-template<class T, int dim> float NearTree<T,dim>::intersections[NearTree::Nintersec][dim];
-template<class T, int dim> unsigned char NearTree<T,dim>::interMask[NearTree::Nintersec][2];
+template<class T, int dim> float NearTree<T,dim>::intersections[ipow(3,dim)][dim];
+template<class T, int dim> unsigned char NearTree<T,dim>::interMask[ipow(3,dim)][2];
+template<class T, int dim> int NearTree<T,dim>::Nintersec = ipow(3, dim);
 
 class Particle2{
 public:
