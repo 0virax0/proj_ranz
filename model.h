@@ -6,7 +6,8 @@
 #include <QXmlStreamWriter>
 using std::vector;
 
-constexpr int ipow(int n, int pow){ //potenze di interi a compile time
+template<class T>
+constexpr T ipow(T n, int pow){ //potenze di interi a compile time
     return pow == 0 ? 1 : n * ipow(n, pow-1);
 }
 
@@ -116,7 +117,7 @@ template<class T, int dim> float NearTree<T,dim>::intersections[ipow(3,dim)][dim
 template<class T, int dim> unsigned char NearTree<T,dim>::interMask[ipow(3,dim)][2];
 template<class T, int dim> int NearTree<T,dim>::Nintersec = ipow(3, dim);
 
-class Particle2{
+class Particle2{    //la quantità di materia è costante
 public:
    class Properties{
    public:
@@ -129,12 +130,13 @@ public:
         Properties();
         Properties(const vector<float>& pos, const vector<float>& vel, float m, float p, float t);
         Properties(const Properties& p);
+        Properties& operator=(const Properties& p);
    };
    Properties* properties;
 
    Particle2* substitute; //segnala che occorre sostituire la particella con quella puntata
 
-   virtual void advect(std::vector<Particle2*>)=0;
+   virtual void advect(const vector<Particle2*>& neighbours, float deltaTime);
    bool swapState();
    virtual vector<float> getColor()=0;
    virtual bool serialize(QXmlStreamWriter&);
@@ -147,20 +149,37 @@ public:
 
 protected:
    Properties* newProperties;
+   float conductivity;  // K/s da 0 a 100K
+   float specific_heat;  // Joule/K
+   float entropy;  // Joule per ragiungerla
+
+   //metodi per gestire vettori a 2 dimensioni
+   static inline vector<float> add(const vector<float>& v1, const vector<float>& v2);
+   static inline void add_side(vector<float>& v1, const vector<float>& v2);
+   static inline vector<float> sub(const vector<float>& v1, const vector<float>& v2);
+   static inline void sub_side(vector<float>& v1, const vector<float>& v2);
+   static inline vector<float> mul(const vector<float>& v1, float scalar);
+   static inline void mul_side(vector<float>& v1, float scalar);
+   static inline float sqDist(const vector<float>& v1, const vector<float>& v2);
+   static inline float sqLength(const vector<float>& v1);
+   static inline void normalize(vector<float>& v1);
+   static inline float dot(const vector<float>& v1, const vector<float>& v2);
 };
 
 class Solid : public virtual Particle2{
 public:
    float friction;
 
-   void advect(std::vector<Particle2*>) override;
+   void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
    bool serialize(QXmlStreamWriter&) override;
 
    Solid(float fric);
    Solid(QXmlStreamReader&);
 };
 class Liquid : public virtual Particle2{};
-class Gas : public virtual Particle2{};
+class Gas : public virtual Particle2{
+   void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
+};
 class Explosive : public virtual Particle2{};
 
 //classi concrete
@@ -168,7 +187,7 @@ class Water : public Liquid{
 public:
     static vector<float> color;
 
-    void advect(std::vector<Particle2*>) override;
+    void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
     bool serialize(QXmlStreamWriter&) override;
 
     Water(const vector<float>& pos);
@@ -178,7 +197,7 @@ class Ice : public Solid{
 public:
     static vector<float> color;
 
-    void advect(std::vector<Particle2*>) override;
+    void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
     vector<float> getColor() override;
     bool serialize(QXmlStreamWriter&) override;
 
@@ -190,7 +209,7 @@ class Steam : public Gas{
 public:
     static vector<float> color;
 
-    void advect(std::vector<Particle2*>) override;
+    void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
     bool serialize(QXmlStreamWriter&) override;
 
     Steam(const vector<float>& pos);
@@ -208,14 +227,14 @@ public:
 
     bool insert(const vector<float>& pos, particle_type t); //inserisco in posizione cartesiana particelle di tipo t
     template<class Lambda>  //outParticle prende un puntatore a Particle2 grazie al quale può leggere lo stato di ogni particella nel container
-    bool update(Lambda outParticle);
+    bool update(Lambda outParticle, float deltaTime);
 
     Model();
     ~Model();
 private:
     tree* next_container;
 
-    static bool _update(Tree<Particle2,2>::Iterator it, tree* cont);
+    static bool _update(Tree<Particle2,2>::Iterator it, tree* cont, float deltaTime);
 };
 
 //implementazione Node
