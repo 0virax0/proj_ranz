@@ -28,12 +28,14 @@ SOURCES += \
         main.cpp \
         view.cpp \
     model.cpp \
-    serializer.cpp
+    serializer.cpp \
+    canvas.cpp
 
 HEADERS += \
         view.h \
     model.h \
-    serializer.h
+    serializer.h \
+    canvas.h
 
 FORMS += \
         mainwindow.ui
