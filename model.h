@@ -137,12 +137,12 @@ public:
    Particle2* substitute; //segnala che occorre sostituire la particella con quella puntata
 
    virtual void advect(const vector<Particle2*>& neighbours, float deltaTime);
-   bool swapState();
+   bool swapState(float deltaTime);
    virtual vector<float> getColor()=0;
    virtual bool serialize(QXmlStreamWriter&);
 
    Particle2(); //create properties in the heap
-   Particle2(const vector<float>& pos, const vector<float>& vel, float m, float p, float t);
+   Particle2(const vector<float>& pos, const vector<float>& vel, float m, float p, float t, float cond, float spec_heat);
    Particle2(const Particle2&);
    Particle2(QXmlStreamReader&); //create from deserialization
    virtual ~Particle2();
@@ -152,6 +152,8 @@ protected:
    float conductivity;  // K/s da 0 a 100K
    float specific_heat;  // Joule/K
    float entropy;  // Joule per ragiungerla
+
+   vector<float> correctionDir;
 
    //metodi per gestire vettori a 2 dimensioni
    static inline vector<float> add(const vector<float>& v1, const vector<float>& v2);
@@ -164,6 +166,7 @@ protected:
    static inline float sqLength(const vector<float>& v1);
    static inline void normalize(vector<float>& v1);
    static inline float dot(const vector<float>& v1, const vector<float>& v2);
+   static inline void rotate90(vector<float>& v1);
 };
 
 class Solid : public virtual Particle2{
@@ -176,44 +179,104 @@ public:
    Solid(float fric);
    Solid(QXmlStreamReader&);
 };
-class Liquid : public virtual Particle2{};
-class Gas : public virtual Particle2{
+class Liquid : public virtual Particle2{
+   public:
    void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
+   bool serialize(QXmlStreamWriter&) override;
+
+   Liquid();
+   Liquid(QXmlStreamReader&);
 };
-class Explosive : public virtual Particle2{};
+class Gas : public virtual Particle2{
+public:
+   void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
+   bool serialize(QXmlStreamWriter&) override;
+
+   Gas();
+   Gas(QXmlStreamReader&);
+};
+class Explosive : public virtual Particle2{
+public:
+   float threshold_temp;
+   float threshold_pressure;
+   float explosion_pressure;
+
+   void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
+   bool serialize(QXmlStreamWriter&) override;
+
+   Explosive(float thresh_t, float thresh_p, float explosion_pres);
+   Explosive(QXmlStreamReader&);
+};
 
 //classi concrete
 class Water : public Liquid{
 public:
     static vector<float> color;
-
-    void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-    bool serialize(QXmlStreamWriter&) override;
-
-    Water(const vector<float>& pos);
-    Water(QXmlStreamReader&);
-};
-class Ice : public Solid{
-public:
-    static vector<float> color;
+    vector<float> currColor;
 
     void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
     vector<float> getColor() override;
     bool serialize(QXmlStreamWriter&) override;
 
-    Ice(const vector<float>& pos);
+    Water(const vector<float>& pos, const vector<float>& vel = {0,0});
+    Water(QXmlStreamReader&);
+    ~Water() override;
+};
+class Ice : public Solid{
+public:
+    static vector<float> color;
+    vector<float> currColor;
+
+    void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
+    vector<float> getColor() override;
+    bool serialize(QXmlStreamWriter&) override;
+
+    Ice(const vector<float>& pos, const vector<float>& vel = {0,0});
     Ice(QXmlStreamReader&);
     ~Ice() override;
 };
 class Steam : public Gas{
 public:
     static vector<float> color;
+    vector<float> currColor;
 
     void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
+    vector<float> getColor() override;
     bool serialize(QXmlStreamWriter&) override;
 
-    Steam(const vector<float>& pos);
+    Steam(const vector<float>& pos, const vector<float>& vel = {0,0});
     Steam(QXmlStreamReader&);
+    ~Steam() override;
+};
+
+class GunPowder : public Solid, public Explosive{
+public:
+    static vector<float> color;
+    vector<float> currColor;
+
+    void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
+    vector<float> getColor() override;
+    bool serialize(QXmlStreamWriter&) override;
+
+    GunPowder(const vector<float>& pos, const vector<float>& vel = {0,0});
+    GunPowder(QXmlStreamReader&);
+    ~GunPowder() override;
+};
+
+class Fire : public Gas{
+public:
+    static vector<float> color;
+    vector<float> currColor;
+
+    void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
+    vector<float> getColor() override;
+    bool serialize(QXmlStreamWriter&) override;
+
+    Fire(const vector<float>& pos, const vector<float>& vel = {0,0}, float start_pressure = 1);
+    Fire(QXmlStreamReader&);
+    ~Fire() override;
+protected:
+    float materialLeft;
 };
 
 //Model
