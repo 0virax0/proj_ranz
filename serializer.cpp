@@ -39,7 +39,7 @@ bool Serializer::_serialize(Tree<Particle2, 2>::Iterator it, QXmlStreamWriter& x
    bool retVal = true;
    retVal &= it->serialize(xml);
 
-   for (int i=0; i< Tree<Particle2,2>::Nchild; i++)
+   for (unsigned int i=0; i< Tree<Particle2,2>::Nchild; i++)
        retVal &= _serialize(it[i], xml);
    return retVal;
 }

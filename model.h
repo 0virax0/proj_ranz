@@ -71,7 +71,7 @@ public:
     };
     Iterator root();
 
-    static int Nchild;
+    static unsigned int Nchild;
 
     Tree();
     Tree(const Tree& t);    //copia profonda
@@ -94,11 +94,11 @@ public:
     ~Tree();    //distruzione profonda
 };
 template<class T, int dim> typename Tree<T,dim>::Iterator Tree<T,dim>::Iterator::pastEnd = Tree<T,dim>::Iterator();
-template<class T, int dim> int Tree<T,dim>::Nchild = ipow(2,dim);
+template<class T, int dim> unsigned int Tree<T,dim>::Nchild = ipow(2,dim);
 
 template<class T, int dim>
 class NearTree : public Tree<T, dim>{
-public: static int Nintersec;
+public: static unsigned int Nintersec;
 protected:
     static bool singleConstructed;
     static float intersections[ipow(3,dim)][dim]; //definisce tutte le intersezioni tra gli spazi dei figli, ordinate per connettività decrescente (-1, 0 per coordinate condivise, 1)
@@ -115,7 +115,7 @@ public:
 template<class T, int dim> bool NearTree<T,dim>::singleConstructed = false;
 template<class T, int dim> float NearTree<T,dim>::intersections[ipow(3,dim)][dim];
 template<class T, int dim> unsigned char NearTree<T,dim>::interMask[ipow(3,dim)][2];
-template<class T, int dim> int NearTree<T,dim>::Nintersec = ipow(3, dim);
+template<class T, int dim> unsigned int NearTree<T,dim>::Nintersec = ipow(3, dim);
 
 class Particle2{    //la quantità di materia è costante
 public:
@@ -138,7 +138,7 @@ public:
 
    virtual void advect(const vector<Particle2*>& neighbours, float deltaTime);
    bool swapState(float deltaTime);
-   virtual vector<float> getColor()=0;
+   virtual vector<int> getColor()=0;
    virtual bool serialize(QXmlStreamWriter&);
 
    Particle2(); //create properties in the heap
@@ -211,11 +211,11 @@ public:
 //classi concrete
 class Water : public Liquid{
 public:
-    static vector<float> color;
-    vector<float> currColor;
+    static vector<int> color;
+    vector<int> currColor;
 
     void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-    vector<float> getColor() override;
+    vector<int> getColor() override;
     bool serialize(QXmlStreamWriter&) override;
 
     Water(const vector<float>& pos, const vector<float>& vel = {0,0});
@@ -224,11 +224,11 @@ public:
 };
 class Ice : public Solid{
 public:
-    static vector<float> color;
-    vector<float> currColor;
+    static vector<int> color;
+    vector<int> currColor;
 
     void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-    vector<float> getColor() override;
+    vector<int> getColor() override;
     bool serialize(QXmlStreamWriter&) override;
 
     Ice(const vector<float>& pos, const vector<float>& vel = {0,0});
@@ -237,11 +237,11 @@ public:
 };
 class Steam : public Gas{
 public:
-    static vector<float> color;
-    vector<float> currColor;
+    static vector<int> color;
+    vector<int> currColor;
 
     void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-    vector<float> getColor() override;
+    vector<int> getColor() override;
     bool serialize(QXmlStreamWriter&) override;
 
     Steam(const vector<float>& pos, const vector<float>& vel = {0,0});
@@ -251,11 +251,11 @@ public:
 
 class GunPowder : public Solid, public Explosive{
 public:
-    static vector<float> color;
-    vector<float> currColor;
+    static vector<int> color;
+    vector<int> currColor;
 
     void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-    vector<float> getColor() override;
+    vector<int> getColor() override;
     bool serialize(QXmlStreamWriter&) override;
 
     GunPowder(const vector<float>& pos, const vector<float>& vel = {0,0});
@@ -265,11 +265,11 @@ public:
 
 class Fire : public Gas{
 public:
-    static vector<float> color;
-    vector<float> currColor;
+    static vector<int> color;
+    vector<int> currColor;
 
     void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-    vector<float> getColor() override;
+    vector<int> getColor() override;
     bool serialize(QXmlStreamWriter&) override;
 
     Fire(const vector<float>& pos, const vector<float>& vel = {0,0}, float start_pressure = 1);
@@ -284,11 +284,12 @@ class Model{
 public:
     using tree = NearTree<Particle2, 2>;
     enum particle_type {
-        Water, Ice, Steam
+        Water, Ice, Steam, Fire, GunPowder
     };
     tree* container;
 
     bool insert(const vector<float>& pos, particle_type t); //inserisco in posizione cartesiana particelle di tipo t
+    vector<int> getParticleColor(int particleType);
     template<class Lambda>  //outParticle prende un puntatore a Particle2 grazie al quale può leggere lo stato di ogni particella nel container
     bool update(Lambda outParticle, float deltaTime);
 
@@ -299,6 +300,32 @@ private:
 
     static bool _update(Tree<Particle2,2>::Iterator it, tree* cont, float deltaTime);
 };
+template<class Lambda>
+bool Model::update(Lambda outParticle, float deltaTime){
+    //faccio l'advection in ogni particella
+    _update(container->root(), container, deltaTime);
+
+    //faccio il detach chiamando anche outParticle
+    container->detach(*next_container,
+                      [&outParticle, deltaTime](Particle2*& thisParticle)->vector<float>{
+                           thisParticle->swapState(deltaTime);   //le nuove proprietà vengono portate su
+                           if(thisParticle->substitute != nullptr) {    //sostituisco con la nuova particella se serve
+                               Particle2* old = thisParticle;
+                               thisParticle = thisParticle->substitute;
+                               delete old;
+                           }
+                           outParticle(thisParticle);   //invoco la funzione che utilizza le particle aggiornate nella View
+                           return thisParticle->properties->position;
+                      } );
+
+    //porto su il nuovo albero aggiornato
+   auto tmp = container;
+   container = next_container;
+   next_container = tmp;
+
+   return true;
+}
+
 
 //implementazione Node
 template<class T, int dim>
@@ -445,7 +472,7 @@ template<class T, int dim>
 void Tree<T,dim>::destroy(Node* r){
    if(!r)return;
 
-   for(int i=0; i<(Nchild); i++){
+   for(unsigned int i=0; i<(Nchild); i++){
        destroy(r->children[i]);
    }
    delete r;
@@ -473,13 +500,14 @@ typename Tree<T,dim>::Iterator Tree<T,dim>::root(){
 template<class T, int dim>
 template<class Lambda>
 void Tree<T,dim>::detach(Tree& dest, Lambda fn){
+    if(!r)return;
     Iterator curr = root();
-    for(int i=0; i<(Nchild); i++){
+    for(unsigned int i=0; i<(Nchild); i++){
         curr.currIndex = i;
         detach(curr, dest, fn);
     }
     r = nullptr;
-    curr.ptr->position = fn(curr.ptr);
+    curr.ptr->position = fn(curr.ptr->data);
     dest.insert(curr);
 }
 template<class T, int dim>
@@ -492,7 +520,7 @@ void Tree<T,dim>::detach(Iterator t, Tree& dest, Lambda fn){
     //prima stacco i figli poi il sottoalbero
     int startIndex = curr.currIndex;
     curr.currIndex=0;
-    for(int i=0; i<(Nchild); i++){
+    for(unsigned int i=0; i<(Nchild); i++){
        curr.currIndex = i;
        detach(curr, dest, fn);
     }
@@ -659,7 +687,7 @@ void NearTree<T,dim>::findNrecursive(typename Tree<T,dim>::Node*& n, const vecto
     }
     if(found){
         //trovo sottoalberi corrispondenti
-        for(int c=0; c< Tree<T,dim>::Nchild; c++){
+        for(unsigned int c=0; c< Tree<T,dim>::Nchild; c++){
             unsigned char indexMask = static_cast<unsigned char>(c);
             indexMask &= interMask[interIndex][0]; //neutralizzo i valori dove in intermask ho 0
             if(indexMask == interMask[interIndex][1]) //vedo se matcha

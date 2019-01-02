@@ -8,40 +8,28 @@ Model::~Model(){
     delete next_container;
 }
 
-bool Model::insert(const vector<float> &pos, Model::particle_type t) {
+bool Model::insert(const vector<float> &pos, particle_type t) {
    //inserisco una sola particella
     switch(t){
     case Water: container->insert(new class Water(pos), pos); break;
     case Ice: container->insert(new class Ice(pos), pos); break;
     case Steam: container->insert(new class Steam(pos), pos); break;
+    case Fire: container->insert(new class Fire(pos), pos); break;
+    case GunPowder: container->insert(new class GunPowder(pos), pos); break;
     }
     return true;
 }
 
-template<class Lambda>
-bool Model::update(Lambda outParticle, float deltaTime){
-    //faccio l'advection in ogni particella
-    _update(container->root(), container, deltaTime);
-
-    //faccio il detach chiamando anche outParticle
-    container->detach(*next_container,
-                      [&outParticle, deltaTime](Particle2*& thisParticle)->vector<float>{
-                           thisParticle->swapState(deltaTime);   //le nuove proprietà vengono portate su
-                           if(thisParticle->substitute != nullptr) {    //sostituisco con la nuova particella se serve
-                               Particle2* old = thisParticle;
-                               thisParticle = thisParticle->substitute;
-                               delete old;
-                           }
-                           outParticle(thisParticle);   //invoco la funzione che utilizza le particle aggiornate nella View
-                           return thisParticle->properties->position;
-                      } );
-
-    //porto su il nuovo albero aggiornato
-   auto tmp = container;
-   container = next_container;
-   next_container = tmp;
-
-   return true;
+vector<int> Model::getParticleColor(int particleType){
+    particle_type type = static_cast<particle_type>(particleType);
+    switch(type){
+    case Water: return Water::color;
+    case Ice: return Ice::color;
+    case Steam: return Steam::color;
+    case Fire: return Fire::color;
+    case GunPowder: return GunPowder::color;
+    }
+    return {0,0,0};
 }
 
 bool Model::_update(Tree<Particle2,2>::Iterator it, tree* cont, float deltaTime) {
@@ -53,7 +41,7 @@ bool Model::_update(Tree<Particle2,2>::Iterator it, tree* cont, float deltaTime)
     it->advect(neighbours, deltaTime); //faccio advection a partire dalle mie properties e quelle dei vicini
 
     //ripeto per i sottoalberi
-   for (int i=0; i< Tree<Particle2,2>::Nchild; i++)
+   for (unsigned int i=0; i< Tree<Particle2,2>::Nchild; i++)
        retVal &= _update(it[i], cont, deltaTime);
    return retVal;
 }
@@ -88,6 +76,9 @@ Particle2::Particle2(QXmlStreamReader & xml): properties(new Properties), substi
     if(xml.readNextStartElement() && xml.name() == "mass") properties->mass = xml.readElementText().toFloat();
     if(xml.readNextStartElement() && xml.name() == "pressure") properties->pressure = xml.readElementText().toFloat();
     if(xml.readNextStartElement() && xml.name() == "temperature") properties->temperature = xml.readElementText().toFloat();
+    if(xml.readNextStartElement() && xml.name() == "conductivity") properties->temperature = xml.readElementText().toFloat();
+    if(xml.readNextStartElement() && xml.name() == "specific_heat") properties->temperature = xml.readElementText().toFloat();
+    if(xml.readNextStartElement() && xml.name() == "entropy") properties->temperature = xml.readElementText().toFloat();
 }
 Particle2::~Particle2(){
     delete properties;
@@ -105,6 +96,9 @@ bool Particle2::serialize(QXmlStreamWriter& xml){
     xml.writeTextElement("mass", QString::number(properties->mass));
     xml.writeTextElement("pressure", QString::number(properties->pressure));
     xml.writeTextElement("temperature", QString::number(properties->temperature));
+    xml.writeTextElement("conductivity", QString::number(conductivity));
+    xml.writeTextElement("specific_heat", QString::number(specific_heat));
+    xml.writeTextElement("entropy", QString::number(entropy));
 
     return true;
 }
@@ -168,21 +162,21 @@ bool Particle2::swapState(float deltaTime){
 vector<float> Particle2::add(const vector<float>& v1, const vector<float>& v2){
     return {v1[0]+v2[0], v1[1]+v2[1]};
 }
-void add_side(vector<float>& v1, const vector<float>& v2){
+void Particle2::add_side(vector<float>& v1, const vector<float>& v2){
     v1[0] += v2[0];
     v1[1] += v2[1];
 }
 vector<float> Particle2::sub(const vector<float>& v1, const vector<float>& v2){
     return {v1[0]-v2[0], v1[1]-v2[1]};
 }
-void sub_side(vector<float>& v1, const vector<float>& v2){
+void Particle2::sub_side(vector<float>& v1, const vector<float>& v2){
     v1[0] -= v2[0];
     v1[1] -= v2[1];
 }
 vector<float> Particle2::mul(const vector<float>& v1, float scalar){
     return {v1[0]*scalar, v1[1]*scalar};
 }
-void mul_side(vector<float>& v1, float scalar){
+void Particle2::mul_side(vector<float>& v1, float scalar){
     v1[0] *= scalar;
     v1[1] *= scalar;
 }
@@ -303,7 +297,7 @@ bool Explosive::serialize(QXmlStreamWriter& xml) {
 }
 
 //implementazione ice
-vector<float> Ice::color{0.3f, 0.3f, 1.0f};
+vector<int> Ice::color{100, 100, 255};
 Ice::Ice(const vector<float>& pos, const vector<float>& vel): Particle2 (pos, vel, 0.93f, 1.0f, 272.0f, 20.0f, 0.5f), Solid (0.04f), currColor(color){}
 Ice::Ice(QXmlStreamReader& xml): Particle2 (xml), Solid(xml){/*letture aggiuntive*/ }
 Ice::~Ice() {}
@@ -317,7 +311,7 @@ void Ice::advect(const vector<Particle2*>& neighbours, float deltaTime) {
        substitute = new Water(properties->position, properties->velocity);
     }
 }
-vector<float> Ice::getColor(){
+vector<int> Ice::getColor(){
     return currColor;
 }
 bool Ice::serialize(QXmlStreamWriter& xml){
@@ -333,7 +327,7 @@ bool Ice::serialize(QXmlStreamWriter& xml){
 }
 
 //implementazione Water
-vector<float> Water::color{0.3f, 0.3f, 1.0f};
+vector<int> Water::color{100, 100, 255};
 Water::Water(const vector<float>& pos, const vector<float>& vel): Particle2 (pos, vel, 0.95f, 1.0f, 290.0f, 20.0f, 1.0f), Liquid (), currColor(color){}
 Water::Water(QXmlStreamReader& xml): Particle2 (xml), Liquid(xml){/*letture aggiuntive*/ }
 Water::~Water() {}
@@ -350,7 +344,7 @@ void Water::advect(const vector<Particle2*>& neighbours, float deltaTime) {
        substitute = new Steam(properties->position, properties->velocity);
     }
 }
-vector<float> Water::getColor(){
+vector<int> Water::getColor(){
     return currColor;
 }
 bool Water::serialize(QXmlStreamWriter& xml){
@@ -366,7 +360,7 @@ bool Water::serialize(QXmlStreamWriter& xml){
 }
 
 //implementazione steam
-vector<float> Steam::color{0.7f, 0.7f, 1.0f};
+vector<int> Steam::color{200, 200, 255};
 Steam::Steam(const vector<float>& pos, const vector<float>& vel): Particle2 (pos, vel, 0.2f, 1.0f, 373.0f, 5.0f, 0.2f), Gas (), currColor(color){}
 Steam::Steam(QXmlStreamReader& xml): Particle2 (xml), Gas(xml){/*letture aggiuntive*/ }
 Steam::~Steam() {}
@@ -380,7 +374,7 @@ void Steam::advect(const vector<Particle2*>& neighbours, float deltaTime) {
        substitute = new Water(properties->position, properties->velocity);
     }
 }
-vector<float> Steam::getColor(){
+vector<int> Steam::getColor(){
     return currColor;
 }
 bool Steam::serialize(QXmlStreamWriter& xml){
@@ -396,14 +390,14 @@ bool Steam::serialize(QXmlStreamWriter& xml){
 }
 
 //implementazione fire
-vector<float> Fire::color{1.0f, 0.3f, 0.3f};
+vector<int> Fire::color{255, 100, 100};
 Fire::Fire(const vector<float>& pos, const vector<float>& vel, float start_pressure): Particle2 (pos, vel, 0.1f, start_pressure, 1000.0f, 1.0f, 0.5f), Gas(), currColor(color), materialLeft(1.0f){}
 Fire::Fire(QXmlStreamReader& xml): Particle2 (xml), Gas(xml){
     if(xml.readNextStartElement() && xml.name() == "materialLeft") materialLeft = xml.readElementText().toFloat();
 }
 Fire::~Fire() {}
 
-vector<float> Fire::getColor(){
+vector<int> Fire::getColor(){
     return currColor;
 }
 void Fire::advect(const vector<Particle2*>& neighbours, float deltaTime){
@@ -415,7 +409,11 @@ void Fire::advect(const vector<Particle2*>& neighbours, float deltaTime){
         materialLeft -= 0.2f * deltaTime;
         entropy += 30.0f * deltaTime;
         newProperties->temperature = entropy * newProperties->pressure / specific_heat;
-        currColor = mul(color, newProperties->temperature/1000.0f);
+        vector<float> col{color[0]/255.0f, color[1]/255.0f, color[2]/255.0f};
+        col = mul(col, newProperties->temperature/1000.0f); //setta il colore in base alla temperatura
+        currColor[0] *= static_cast<int>(col[0]) * 255;
+        currColor[1] *= static_cast<int>(col[1]) * 255;
+        currColor[2] *= static_cast<int>(col[2]) * 255;
     }
 }
 bool Fire::serialize(QXmlStreamWriter& xml){
@@ -430,7 +428,7 @@ bool Fire::serialize(QXmlStreamWriter& xml){
 }
 
 //implementazione gunpowder
-vector<float> GunPowder::color{0.1f, 0.1f, 0.1f};
+vector<int> GunPowder::color{20, 20, 20};
 GunPowder::GunPowder(const vector<float>& pos, const vector<float>& vel): Particle2 (pos, vel, 0.53f, 1.0f, 279.0f, 5.0f, 0.3f), Solid (0.6f), Explosive (480.0f, 3.0f, 20.0f), currColor(color){}
 GunPowder::GunPowder(QXmlStreamReader& xml): Particle2 (xml), Solid(xml), Explosive (xml){/*letture aggiuntive*/ }
 GunPowder::~GunPowder() {}
@@ -439,6 +437,9 @@ void GunPowder::advect(const vector<Particle2*>& neighbours, float deltaTime){
    Particle2::advect(neighbours, deltaTime);
    Solid::advect(neighbours, deltaTime);
    Explosive::advect(neighbours, deltaTime);
+}
+vector<int> GunPowder::getColor(){
+    return currColor;
 }
 bool GunPowder::serialize(QXmlStreamWriter& xml){
     xml.writeStartElement("GunPowder");
