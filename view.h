@@ -18,16 +18,12 @@ public:
    View(Model& mod);
 };
 
-namespace Ui {
-class MainWindow;
-}
-
-class MainWindow : public QMainWindow
+class MainWindow : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow();
     ~MainWindow();
 
     Model model;
@@ -41,8 +37,6 @@ public slots:
     void set_state(drawing_state newState);
     void brush_moved(vector<float> newPos);
 private:
-    Ui::MainWindow *ui;
-
     //ricorda lo stato del pennello
     drawing_state state;
 };

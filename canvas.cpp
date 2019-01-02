@@ -1,5 +1,6 @@
 #include "canvas.h"
 #include <QMouseEvent>
+#include <iostream>
 
 Canvas::Canvas(QWidget *parent, Model& mod)
     : QOpenGLWidget(parent), model(mod)
@@ -18,8 +19,8 @@ void Canvas::animate()
 
 void Canvas::mouseMoveEvent(QMouseEvent* event){
     QPoint p= event->pos();
-    float w = p.x() / width();
-    float h = p.y() / height();
+    float w = p.x() / static_cast<float>(width());
+    float h = p.y() / static_cast<float>(height());
     emit positionChanged({w, h});
 }
 
@@ -34,7 +35,7 @@ void Canvas::paintEvent(QPaintEvent* event){
         painter.setBrush(QBrush(QColor(col[0], col[1], col[2])));
 
         int w = static_cast<int>(particle->properties->position[0] * width());
-        int h = static_cast<int>(-particle->properties->position[1] * height());
+        int h = static_cast<int>(height()-particle->properties->position[1] * height());
         painter.drawEllipse(w, h, 3, 3);
 
     }, deltaTime);

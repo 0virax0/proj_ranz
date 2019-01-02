@@ -1,5 +1,6 @@
 #include "model.h"
 #include <math.h>
+#include <iostream>
 
 //implementazione model
 Model::Model(): container(new NearTree<Particle2,2>), next_container(new NearTree<Particle2,2>){}
@@ -37,7 +38,7 @@ bool Model::_update(Tree<Particle2,2>::Iterator it, tree* cont, float deltaTime)
     bool retVal=true;
 
     vector<Particle2*> neighbours;
-    cont->findNeighbouring(it, 0.1f, neighbours);   //trovo i vicini
+    cont->findNeighbouring(it, ipow(0.05f,2), neighbours);   //trovo i vicini
     it->advect(neighbours, deltaTime); //faccio advection a partire dalle mie properties e quelle dei vicini
 
     //ripeto per i sottoalberi
