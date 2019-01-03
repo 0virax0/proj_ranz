@@ -8,6 +8,7 @@ Model::~Model(){
     delete container;
     delete next_container;
 }
+int Model::numParticles = 0;
 
 bool Model::insert(const vector<float> &pos, particle_type t) {
    //inserisco una sola particella
@@ -38,7 +39,7 @@ bool Model::_update(Tree<Particle2,2>::Iterator it, tree* cont, float deltaTime)
     bool retVal=true;
 
     vector<Particle2*> neighbours;
-    cont->findNeighbouring(it, ipow(0.05f,2), neighbours);   //trovo i vicini
+    cont->findNeighbouring(it, ipow(0.5f,2), neighbours);   //trovo i vicini
     it->advect(neighbours, deltaTime); //faccio advection a partire dalle mie properties e quelle dei vicini
 
     //ripeto per i sottoalberi
@@ -124,12 +125,13 @@ void Particle2::advect(const vector<Particle2*>& neighbours, float deltaTime){
             //per il calcolo dell'urto anelastico
             mul_side(perpendicularVel, otherProperties->mass);
             add_side(newProperties->velocity, perpendicularVel);
+        std::cout<<(isnan(newProperties->velocity[0])? "nan":"");
         }
         //aggiungo l'accelerazione di gravità
-        add_side(newProperties->velocity, mul({0.0f, -0.981f}, deltaTime));
+        //add_side(newProperties->velocity, mul({0.0f, -0.981f}, deltaTime));
 
         //faccio l'advection della pressione
-        add_side(newProperties->velocity, mul(versor, (0.0001f * (1.0f/currSqDist) * (otherProperties->pressure - 1.0f) * deltaTime) / properties->mass));
+        //add_side(newProperties->velocity, mul(versor, (0.0001f * (1.0f/currSqDist) * (otherProperties->pressure - 1.0f) * deltaTime) / properties->mass));
 
         float distFactor = 1/(currSqDist * 10000 +1);
         meanTemp += otherProperties->temperature * distFactor;
@@ -153,7 +155,13 @@ bool Particle2::swapState(float deltaTime){
     }
     //applico lo spostamento
     add_side(newProperties->position, mul(newProperties->velocity, deltaTime));
+    //controllo di essere dentro i confini
+    if(newProperties->position[0]<0.0f){ newProperties->position[0] = 0.0f;}
+    if(newProperties->position[0]>1.0f) newProperties->position[0] = 1.0f;
+    if(newProperties->position[1]<0.0f) newProperties->position[1] = 0.0f;
+    if(newProperties->position[1]>1.0f){ newProperties->position[1] = 1.0f;}
 
+    //swap
     Particle2::Properties* tmp = newProperties;
     newProperties = properties;
     properties = tmp;
@@ -189,6 +197,7 @@ float Particle2::sqLength(const vector<float>& v1){
 }
 void Particle2::normalize(vector<float>& v1){
     float length = sqrt(sqLength(v1));
+    if(length == 0.0f) return;
     v1[0] /= length;
     v1[1] /= length;
 }

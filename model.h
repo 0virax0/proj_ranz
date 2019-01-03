@@ -4,6 +4,7 @@
 #include <math.h>
 #include <QString>
 #include <QXmlStreamWriter>
+#include <iostream>
 using std::vector;
 
 template<class T>
@@ -287,8 +288,9 @@ public:
         Water, Ice, Steam, Fire, GunPowder
     };
     tree* container;
+    static int numParticles;
 
-    bool insert(const vector<float>& pos, particle_type t); //inserisco in posizione cartesiana particelle di tipo t
+    bool insert(const vector<float>& pos, particle_type t); //inserisco in posizione cartesiana particelle di tipo t;
     vector<int> getParticleColor(int particleType);
     template<class Lambda>  //outParticle prende un puntatore a Particle2 grazie al quale può leggere lo stato di ogni particella nel container
     bool update(Lambda outParticle, float deltaTime);
@@ -302,12 +304,15 @@ private:
 };
 template<class Lambda>
 bool Model::update(Lambda outParticle, float deltaTime){
+    int numP = 0;
     //faccio l'advection in ogni particella
     _update(container->root(), container, deltaTime);
 
     //faccio il detach chiamando anche outParticle
     container->detach(*next_container,
-                      [&outParticle, deltaTime](Particle2*& thisParticle)->vector<float>{
+                      [&outParticle, deltaTime, &numP](Particle2*& thisParticle)->vector<float>{
+                           numP += 1;   //conto le particelle
+                           ////std::cout<< thisParticle->properties->position[0]<<" ";
                            thisParticle->swapState(deltaTime);   //le nuove proprietà vengono portate su
                            if(thisParticle->substitute != nullptr) {    //sostituisco con la nuova particella se serve
                                Particle2* old = thisParticle;
@@ -317,6 +322,7 @@ bool Model::update(Lambda outParticle, float deltaTime){
                            outParticle(thisParticle);   //invoco la funzione che utilizza le particle aggiornate nella View
                            return thisParticle->properties->position;
                       } );
+    numParticles = numP;
 
     //porto su il nuovo albero aggiornato
    auto tmp = container;
@@ -325,7 +331,6 @@ bool Model::update(Lambda outParticle, float deltaTime){
 
    return true;
 }
-
 
 //implementazione Node
 template<class T, int dim>
@@ -518,7 +523,7 @@ void Tree<T,dim>::detach(Iterator t, Tree& dest, Lambda fn){
     if(curr == Iterator::pastEnd) return;
 
     //prima stacco i figli poi il sottoalbero
-    int startIndex = curr.currIndex;
+    int startIndex = t.currIndex;
     curr.currIndex=0;
     for(unsigned int i=0; i<(Nchild); i++){
        curr.currIndex = i;
@@ -715,7 +720,7 @@ template<class T, int dim>
 void NearTree<T,dim>::deleteNeighbouring(const vector<float>& targetPos, float maxDistanceSq){
     vector<typename Tree<T,dim>::Node**> v; //conterrà i nodi da eliminare partendo dalle foglie, in modo da avere meno nodi da spostare
     findNrecursive(Tree<T,dim>::r, targetPos, maxDistanceSq, v);
-
+std::cout<<targetPos[1]<<std::endl;
     for(auto it = v.begin(); it!=v.end(); it++) Tree<T,dim>::_del(*it);
 }
 

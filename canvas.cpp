@@ -6,7 +6,7 @@ Canvas::Canvas(QWidget *parent, Model& mod)
     : QOpenGLWidget(parent), model(mod)
 {
     elapsedMs = 0;
-    setFixedSize(200, 200);
+    setFixedSize(1000, 1000);
     setAutoFillBackground(false);
 }
 
@@ -29,14 +29,17 @@ void Canvas::paintEvent(QPaintEvent* event){
     painter.begin(this);
     painter.fillRect(event->rect(), QBrush(QColor(255, 255, 255))); //sfondo bianco
 
+    QPen circlePen = QPen(Qt::NoPen);
+
     //disegno le particelle
-    model.update([&painter, this](Particle2* particle){
+    model.update([&painter, this, &circlePen](Particle2* particle){
         vector<int> col = particle->getColor();
         painter.setBrush(QBrush(QColor(col[0], col[1], col[2])));
+        painter.setPen(circlePen);
 
         int w = static_cast<int>(particle->properties->position[0] * width());
         int h = static_cast<int>(height()-particle->properties->position[1] * height());
-        painter.drawEllipse(w, h, 3, 3);
+        painter.drawEllipse(w, h, 5, 5);
 
     }, deltaTime);
 

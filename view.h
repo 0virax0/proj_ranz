@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include "model.h"
 #include <QComboBox>
+#include <QLCDNumber>
 
 using std::vector;
 
@@ -30,6 +31,7 @@ public:
     View view;
 
     QComboBox* comboBox;
+    QLCDNumber* LCDCounter;
 
     enum drawing_state{painting, erasing};
 
