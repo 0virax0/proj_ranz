@@ -113,29 +113,30 @@ void Particle2::advect(const vector<Particle2*>& neighbours, float deltaTime){
     for(auto it = neighbours.begin(); it!= neighbours.end(); it++){
         Properties* otherProperties = (*it)->properties;
         float currSqDist = sqDist(properties->position, otherProperties->position);
-        vector<float> versor = sub(properties->position, otherProperties->position);    //pointing towards me
-        normalize(versor);
+        if(currSqDist > 0.00001f){     //salto le particelle esattamente sopra a me
+            vector<float> versor = sub(properties->position, otherProperties->position);    //punta a me
+            normalize(versor);
 
-        //contact advection
-        if(currSqDist < ipow(0.01f, 2)){
-            //calcolo la componente perpendicolare della velocità dell'altra particella rispetto a questa;
-            vector<float> perpendicularVel = mul(versor , dot(versor , otherProperties->velocity));
-            add_side(correctionDir, versor);
+            //contact advection
+            if(currSqDist < ipow(0.01f, 2)){
+                //calcolo la componente perpendicolare della velocità dell'altra particella rispetto a questa;
+                vector<float> perpendicularVel = mul(versor , dot(versor , otherProperties->velocity));
+                add_side(correctionDir, versor);
 
-            //per il calcolo dell'urto anelastico
-            mul_side(perpendicularVel, otherProperties->mass);
-            add_side(newProperties->velocity, perpendicularVel);
-        std::cout<<(isnan(newProperties->velocity[0])? "nan":"");
+                //per il calcolo dell'urto anelastico
+                mul_side(perpendicularVel, otherProperties->mass);
+                add_side(newProperties->velocity, perpendicularVel);
+            }
+            //aggiungo l'accelerazione di gravità
+            //add_side(newProperties->velocity, mul({0.0f, -0.981f}, deltaTime));
+
+            //faccio l'advection della pressione
+            add_side(newProperties->velocity, mul(versor, (0.0001f * (1.0f/currSqDist) * (otherProperties->pressure - 1.0f) * deltaTime) / properties->mass));
+
+            float distFactor = 1/(currSqDist * 10000 +1);
+            meanTemp += otherProperties->temperature * distFactor;
+            weight += distFactor;
         }
-        //aggiungo l'accelerazione di gravità
-        //add_side(newProperties->velocity, mul({0.0f, -0.981f}, deltaTime));
-
-        //faccio l'advection della pressione
-        //add_side(newProperties->velocity, mul(versor, (0.0001f * (1.0f/currSqDist) * (otherProperties->pressure - 1.0f) * deltaTime) / properties->mass));
-
-        float distFactor = 1/(currSqDist * 10000 +1);
-        meanTemp += otherProperties->temperature * distFactor;
-        weight += distFactor;
     }
     //advection della temperatura
     float curr = properties->temperature;
@@ -156,10 +157,11 @@ bool Particle2::swapState(float deltaTime){
     //applico lo spostamento
     add_side(newProperties->position, mul(newProperties->velocity, deltaTime));
     //controllo di essere dentro i confini
-    if(newProperties->position[0]<0.0f){ newProperties->position[0] = 0.0f;}
-    if(newProperties->position[0]>1.0f) newProperties->position[0] = 1.0f;
-    if(newProperties->position[1]<0.0f) newProperties->position[1] = 0.0f;
-    if(newProperties->position[1]>1.0f){ newProperties->position[1] = 1.0f;}
+    if(newProperties->position[0]<0.0f){ newProperties->position[0] = 0.01f;}
+    if(newProperties->position[0]>1.0f) newProperties->position[0] = 0.99f;
+    if(newProperties->position[1]<0.0f) newProperties->position[1] = 0.01f;
+    if(newProperties->position[1]>1.0f){ newProperties->position[1] = 0.99f;}
+            std::cout<<(isnan(newProperties->position[0])||isnan(newProperties->position[1])? "nanPosition":"");
 
     //swap
     Particle2::Properties* tmp = newProperties;
@@ -197,7 +199,6 @@ float Particle2::sqLength(const vector<float>& v1){
 }
 void Particle2::normalize(vector<float>& v1){
     float length = sqrt(sqLength(v1));
-    if(length == 0.0f) return;
     v1[0] /= length;
     v1[1] /= length;
 }
@@ -221,25 +222,27 @@ void Solid::advect(const vector<Particle2*>& neighbours, float deltaTime) {
     for(auto it = neighbours.begin(); it!= neighbours.end(); it++){
         Properties* otherProperties = (*it)->properties;
         float currSqDist = sqDist(properties->position, otherProperties->position);
-        vector<float> versorParallel = sub(properties->position, otherProperties->position);    //pointing towards me
-        normalize(versorParallel);
-        rotate90(versorParallel);
+        if(currSqDist > 0.00001f){     //salto le particelle esattamente sopra a me
+            vector<float> versorParallel = sub(properties->position, otherProperties->position);    //pointing towards me
+            normalize(versorParallel);
+            rotate90(versorParallel);
 
-        //attrito solo a contatto
-        if(currSqDist < ipow(0.01f, 2)){
-            //calcolo la componente parallela della velocità dell'altra particella rispetto a questa e vice versa
-            float myParallelComponent = dot(versorParallel , properties->velocity);
-            float otherParallelComponent = dot(versorParallel , otherProperties->velocity);
-            vector<float> parallelVel = mul(versorParallel , myParallelComponent - otherParallelComponent);
+            //attrito solo a contatto
+            if(currSqDist < ipow(0.01f, 2)){
+                //calcolo la componente parallela della velocità dell'altra particella rispetto a questa e vice versa
+                float myParallelComponent = dot(versorParallel , properties->velocity);
+                float otherParallelComponent = dot(versorParallel , otherProperties->velocity);
+                vector<float> parallelVel = mul(versorParallel , myParallelComponent - otherParallelComponent);
 
-            //creo una velocità opposta alla mia(parallela) per applicare l'attrito
-            mul_side(parallelVel, friction * deltaTime / properties->mass);
-            float magnitude = sqrt(sqLength(parallelVel));
-            add_side(properties->velocity, parallelVel);
+                //creo una velocità opposta alla mia(parallela) per applicare l'attrito
+                mul_side(parallelVel, friction * deltaTime / properties->mass);
+                float magnitude = sqrt(sqLength(parallelVel));
+                add_side(properties->velocity, parallelVel);
 
-            //ricalcolo l'energia interna della particella, acquisita per attrito
-            entropy += magnitude * 100.0f;
-            newProperties->temperature = entropy * newProperties->pressure / specific_heat;
+                //ricalcolo l'energia interna della particella, acquisita per attrito
+                entropy += magnitude * 100.0f;
+                newProperties->temperature = entropy * newProperties->pressure / specific_heat;
+            }
         }
     }
 }
@@ -267,11 +270,13 @@ void Gas::advect(const vector<Particle2*>& neighbours, float deltaTime){
         float area = 2;
         for(auto it = neighbours.begin(); it!= neighbours.end(); it++){
             float sqdist = sqDist(properties->position, (*it)->properties->position);
+            if(sqdist > 0.001f)     //salto le particelle esattamente sopra a me
             if(sqdist<area)  area = sqdist;
         }
-        float newPressure = 1.0f + 0.000001f * properties->temperature * entropy / area;
+        float newPressure = 1.0f + 0.00000001f * properties->temperature * entropy / area ;
         newProperties->pressure = newPressure;
         newProperties->temperature = entropy * newPressure / specific_heat;
+            std::cout<<(isnan(newPressure)? "nanPressure ":"");
 
     }else newProperties->pressure = 1.0f;
 
