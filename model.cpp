@@ -1,6 +1,7 @@
 #include "model.h"
 #include <math.h>
 #include <iostream>
+#include "serializer.h"
 
 //implementazione model
 Model::Model(): container(new NearTree<Particle2,2>), next_container(new NearTree<Particle2,2>){}
@@ -47,11 +48,19 @@ bool Model::_update(Tree<Particle2,2>::Iterator it, tree* cont, float deltaTime)
        retVal &= _update(it[i], cont, deltaTime);
    return retVal;
 }
+bool Model::save(){
+   return Serializer::serializeTree(*container);
+}
+bool Model::restore(){
+    delete container;
+    container = new NearTree<Particle2,2>;
+   return DeSerializer::deSerializeTree(*container);
+}
 
 //implementazione Particle2
 Particle2::Properties::Properties() : position(2,0), velocity(2,0) {}
 Particle2::Properties::Properties(const vector<float>& pos, const vector<float>& vel, float m, float p, float t): position(pos), velocity(vel), mass(m), pressure(p), temperature(t){}
-Particle2::Properties::Properties(const Properties& p): position(p.position), velocity(p.velocity) {}
+Particle2::Properties::Properties(const Properties& p): position(p.position), velocity(p.velocity), mass(p.mass), pressure(p.pressure), temperature(p.temperature) {}
 Particle2::Properties& Particle2::Properties::operator=(const Particle2::Properties& p){
    position = p.position;
    velocity = p.velocity;
@@ -62,25 +71,31 @@ Particle2::Properties& Particle2::Properties::operator=(const Particle2::Propert
 }
 
 Particle2::Particle2() : properties(new Properties), substitute(nullptr), newProperties(new Properties){}
-Particle2::Particle2(const vector<float>& pos, const vector<float>& vel, float m, float p, float t, float cond, float spec_heat): properties(new Properties(pos, vel, m, p, t)), substitute(nullptr), newProperties(properties),
+Particle2::Particle2(const vector<float>& pos, const vector<float>& vel, float m, float p, float t, float cond, float spec_heat): properties(new Properties(pos, vel, m, p, t)), substitute(nullptr), newProperties(new Properties(*properties)),
     conductivity(cond), specific_heat(spec_heat), entropy(specific_heat * t/p){}
 Particle2::Particle2(const Particle2& p) : properties(new Properties(*p.properties)), substitute(nullptr), newProperties(new Properties(*p.newProperties)){}
 Particle2::Particle2(QXmlStreamReader & xml): properties(new Properties), substitute(nullptr), newProperties(new Properties)
 {
-    if(xml.readNextStartElement() && xml.name() == "position"){
-        if(xml.readNextStartElement() && xml.name() == "0") properties->position[0] = xml.readElementText().toFloat();
-        if(xml.readNextStartElement() && xml.name() == "1") properties->position[1] = xml.readElementText().toFloat();
+    while(xml.readNextStartElement()){
+        if(xml.name() == "position"){
+           while(xml.readNextStartElement()){
+                if(xml.name() == "a") properties->position[0] = xml.readElementText().toFloat();
+                else if(xml.name() == "b") properties->position[1] = xml.readElementText().toFloat();
+            }
+        }
+        else if(xml.name() == "velocity"){
+            while(xml.readNextStartElement()){
+                if(xml.name() == "a") properties->velocity[0] = xml.readElementText().toFloat();
+                else if(xml.name() == "b") properties->velocity[1] = xml.readElementText().toFloat();
+            }
+        }
+        else if(xml.name() == "mass") properties->mass = xml.readElementText().toFloat();
+        else if(xml.name() == "pressure") properties->pressure = xml.readElementText().toFloat();
+        else if(xml.name() == "temperature") properties->temperature = xml.readElementText().toFloat();
+        else if(xml.name() == "conductivity") conductivity = xml.readElementText().toFloat();
+        else if(xml.name() == "specific_heat") specific_heat = xml.readElementText().toFloat();
+        else if(xml.name() == "entropy"){ entropy = xml.readElementText().toFloat(); break;}
     }
-    if(xml.readNextStartElement() && xml.name() == "velocity"){
-        if(xml.readNextStartElement() && xml.name() == "0") properties->velocity[0] = xml.readElementText().toFloat();
-        if(xml.readNextStartElement() && xml.name() == "1") properties->velocity[1] = xml.readElementText().toFloat();
-    }
-    if(xml.readNextStartElement() && xml.name() == "mass") properties->mass = xml.readElementText().toFloat();
-    if(xml.readNextStartElement() && xml.name() == "pressure") properties->pressure = xml.readElementText().toFloat();
-    if(xml.readNextStartElement() && xml.name() == "temperature") properties->temperature = xml.readElementText().toFloat();
-    if(xml.readNextStartElement() && xml.name() == "conductivity") properties->temperature = xml.readElementText().toFloat();
-    if(xml.readNextStartElement() && xml.name() == "specific_heat") properties->temperature = xml.readElementText().toFloat();
-    if(xml.readNextStartElement() && xml.name() == "entropy") properties->temperature = xml.readElementText().toFloat();
 }
 Particle2::~Particle2(){
     delete properties;
@@ -88,12 +103,12 @@ Particle2::~Particle2(){
 }
 bool Particle2::serialize(QXmlStreamWriter& xml){
     xml.writeStartElement("position");
-    xml.writeTextElement("0", QString::number(properties->position[0]));
-    xml.writeTextElement("1", QString::number(properties->position[1]));
+    xml.writeTextElement("a", QString::number(properties->position[0]));
+    xml.writeTextElement("b", QString::number(properties->position[1]));
     xml.writeEndElement();
     xml.writeStartElement("velocity");
-    xml.writeTextElement("0", QString::number(properties->velocity[0]));
-    xml.writeTextElement("1", QString::number(properties->velocity[1]));
+    xml.writeTextElement("a", QString::number(properties->velocity[0]));
+    xml.writeTextElement("b", QString::number(properties->velocity[1]));
     xml.writeEndElement();
     xml.writeTextElement("mass", QString::number(properties->mass));
     xml.writeTextElement("pressure", QString::number(properties->pressure));
@@ -106,14 +121,14 @@ bool Particle2::serialize(QXmlStreamWriter& xml){
 }
 
 void Particle2::advect(const vector<Particle2*>& neighbours, float deltaTime){
-    newProperties = properties;
+    *newProperties = *properties;   //copio le proprietà in quelle nuove
     correctionDir = {0,0};
     float meanTemp = 0, weight = 1;
 
     for(auto it = neighbours.begin(); it!= neighbours.end(); it++){
         Properties* otherProperties = (*it)->properties;
         float currSqDist = sqDist(properties->position, otherProperties->position);
-        if(currSqDist > 0.00001f){     //salto le particelle esattamente sopra a me
+        if(.00001f){     //salto le particelle esattamente sopra a me
             vector<float> versor = sub(properties->position, otherProperties->position);    //punta a me
             normalize(versor);
 
@@ -215,7 +230,9 @@ void Particle2::rotate90(vector<float>& v1){
 Solid::Solid(float fric): friction(fric){}
 Solid::Solid(QXmlStreamReader& xml){
    //letture aggiuntive per finire la costruzione di solid
-    if(xml.readNextStartElement() && xml.name() == "friction") friction = xml.readElementText().toFloat();
+    while(xml.readNextStartElement()){
+        if(xml.name() == "friction") {friction = xml.readElementText().toFloat();break;}
+    }
 }
 void Solid::advect(const vector<Particle2*>& neighbours, float deltaTime) {
     //nel solido aggiungo l'attrito
@@ -276,7 +293,7 @@ void Gas::advect(const vector<Particle2*>& neighbours, float deltaTime){
         float newPressure = 1.0f + 0.00000001f * properties->temperature * entropy / area ;
         newProperties->pressure = newPressure;
         newProperties->temperature = entropy * newPressure / specific_heat;
-            std::cout<<(isnan(newPressure)? "nanPressure ":"");
+            if(isnan(newPressure))std::cout<<"area:"<<area<<" ";
 
     }else newProperties->pressure = 1.0f;
 
@@ -293,9 +310,11 @@ bool Gas::serialize(QXmlStreamWriter& xml) {
 Explosive::Explosive(float thresh_t, float thresh_p, float explosion_pres): threshold_temp(thresh_t), threshold_pressure(thresh_p), explosion_pressure(explosion_pres){}
 Explosive::Explosive(QXmlStreamReader& xml){
    //letture aggiuntive per finire la costruzione di explosive
-    if(xml.readNextStartElement() && xml.name() == "threshold_temp") threshold_temp = xml.readElementText().toFloat();
-    if(xml.readNextStartElement() && xml.name() == "threshold_pressure") threshold_pressure = xml.readElementText().toFloat();
-    if(xml.readNextStartElement() && xml.name() == "explosion_pressure") explosion_pressure = xml.readElementText().toFloat();
+    while(xml.readNextStartElement()){
+        if(xml.name() == "threshold_temp") threshold_temp = xml.readElementText().toFloat();
+        else if(xml.name() == "threshold_pressure") threshold_pressure = xml.readElementText().toFloat();
+        else if(xml.name() == "explosion_pressure"){ explosion_pressure = xml.readElementText().toFloat(); break;}
+    }
 }
 void Explosive::advect(const vector<Particle2*>& neighbours, float deltaTime) {
     //in caso di superamento di uno threshold scambio la particella con fuoco
@@ -314,7 +333,7 @@ bool Explosive::serialize(QXmlStreamWriter& xml) {
 //implementazione ice
 vector<int> Ice::color{100, 100, 255};
 Ice::Ice(const vector<float>& pos, const vector<float>& vel): Particle2 (pos, vel, 0.93f, 1.0f, 272.0f, 20.0f, 0.5f), Solid (0.04f), currColor(color){}
-Ice::Ice(QXmlStreamReader& xml): Particle2 (xml), Solid(xml){/*letture aggiuntive*/ }
+Ice::Ice(QXmlStreamReader& xml): Particle2 (xml), Solid(xml), currColor(color){/*letture aggiuntive*/ }
 Ice::~Ice() {}
 
 void Ice::advect(const vector<Particle2*>& neighbours, float deltaTime) {
@@ -344,7 +363,7 @@ bool Ice::serialize(QXmlStreamWriter& xml){
 //implementazione Water
 vector<int> Water::color{100, 100, 255};
 Water::Water(const vector<float>& pos, const vector<float>& vel): Particle2 (pos, vel, 0.95f, 1.0f, 290.0f, 20.0f, 1.0f), Liquid (), currColor(color){}
-Water::Water(QXmlStreamReader& xml): Particle2 (xml), Liquid(xml){/*letture aggiuntive*/ }
+Water::Water(QXmlStreamReader& xml): Particle2 (xml), Liquid(xml), currColor(color){/*letture aggiuntive*/ }
 Water::~Water() {}
 
 void Water::advect(const vector<Particle2*>& neighbours, float deltaTime) {
@@ -377,7 +396,7 @@ bool Water::serialize(QXmlStreamWriter& xml){
 //implementazione steam
 vector<int> Steam::color{200, 200, 255};
 Steam::Steam(const vector<float>& pos, const vector<float>& vel): Particle2 (pos, vel, 0.2f, 1.0f, 373.0f, 5.0f, 0.2f), Gas (), currColor(color){}
-Steam::Steam(QXmlStreamReader& xml): Particle2 (xml), Gas(xml){/*letture aggiuntive*/ }
+Steam::Steam(QXmlStreamReader& xml): Particle2 (xml), Gas(xml), currColor(color){/*letture aggiuntive*/ }
 Steam::~Steam() {}
 
 void Steam::advect(const vector<Particle2*>& neighbours, float deltaTime) {
@@ -407,8 +426,10 @@ bool Steam::serialize(QXmlStreamWriter& xml){
 //implementazione fire
 vector<int> Fire::color{255, 100, 100};
 Fire::Fire(const vector<float>& pos, const vector<float>& vel, float start_pressure): Particle2 (pos, vel, 0.1f, start_pressure, 1000.0f, 1.0f, 0.5f), Gas(), currColor(color), materialLeft(1.0f){}
-Fire::Fire(QXmlStreamReader& xml): Particle2 (xml), Gas(xml){
-    if(xml.readNextStartElement() && xml.name() == "materialLeft") materialLeft = xml.readElementText().toFloat();
+Fire::Fire(QXmlStreamReader& xml): Particle2 (xml), Gas(xml), currColor(color){
+    while(xml.readNextStartElement()){
+        if(xml.name() == "materialLeft") materialLeft = xml.readElementText().toFloat();
+    }
 }
 Fire::~Fire() {}
 
@@ -445,7 +466,7 @@ bool Fire::serialize(QXmlStreamWriter& xml){
 //implementazione gunpowder
 vector<int> GunPowder::color{20, 20, 20};
 GunPowder::GunPowder(const vector<float>& pos, const vector<float>& vel): Particle2 (pos, vel, 0.53f, 1.0f, 279.0f, 5.0f, 0.3f), Solid (0.6f), Explosive (480.0f, 3.0f, 20.0f), currColor(color){}
-GunPowder::GunPowder(QXmlStreamReader& xml): Particle2 (xml), Solid(xml), Explosive (xml){/*letture aggiuntive*/ }
+GunPowder::GunPowder(QXmlStreamReader& xml): Particle2 (xml), Solid(xml), Explosive (xml), currColor(color){/*letture aggiuntive*/ }
 GunPowder::~GunPowder() {}
 
 void GunPowder::advect(const vector<Particle2*>& neighbours, float deltaTime){

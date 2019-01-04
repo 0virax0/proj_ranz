@@ -10,6 +10,7 @@ public:
 };
 
 class DeSerializer{
+public:
     static bool deSerializeTree(Tree<Particle2, 2>& destination);
 };
 

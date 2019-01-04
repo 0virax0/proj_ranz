@@ -14,6 +14,8 @@ class View : QObject{
 public slots:
    bool insertParticles(vector<float> relativeMousePosition, int particleType);
    bool deleteParticles(vector<float> relativeMousePosition);
+   bool saveParticles();
+   bool restoreParticles();
 public:
    Model& model;
    View(Model& mod);
@@ -34,6 +36,8 @@ public:
     QLCDNumber* LCDCounter;
 
     enum drawing_state{painting, erasing};
+    void show_error(QString);
+    static MainWindow* window;
 
 public slots:
     void set_state(drawing_state newState);

@@ -294,6 +294,8 @@ public:
     vector<int> getParticleColor(int particleType);
     template<class Lambda>  //outParticle prende un puntatore a Particle2 grazie al quale può leggere lo stato di ogni particella nel container
     bool update(Lambda outParticle, float deltaTime);
+    bool save();
+    bool restore();
 
     Model();
     ~Model();
@@ -474,13 +476,13 @@ typename Tree<T,dim>::Node* Tree<T,dim>::copy(Node* r){
     return n;
 }
 template<class T, int dim>
-void Tree<T,dim>::destroy(Node* r){
-   if(!r)return;
+void Tree<T,dim>::destroy(Node* n){
+   if(!n)return;
 
    for(unsigned int i=0; i<(Nchild); i++){
-       destroy(r->children[i]);
+       destroy(n->children[i]);
    }
-   delete r;
+   delete n;
 }
 template<class T, int dim>
 Tree<T,dim>::Tree(): r(nullptr){  }
@@ -595,7 +597,7 @@ bool Tree<T,dim>::_del(Node** i){
     Node* n = *i;
     //controllo se il nodo da togliere ha figli
     bool hasChildren = false;
-    for(unsigned int i=0; i<(Nchild); i++) hasChildren |= n->children[i] != nullptr;
+    for(unsigned int a=0; a<(Nchild); a++) hasChildren |= n->children[a] != nullptr;
     if(!hasChildren){
         //tolgo il nodo direttamente
         *i = nullptr;
@@ -606,10 +608,14 @@ bool Tree<T,dim>::_del(Node** i){
     Node** nearestNodePtr;
     float dist = 2; //maggiore della massima distanza possibile
     _findNearest(n, n->position, nearestNodePtr, dist, true);
-    (*nearestNodePtr)->children = n->children; //il nuovo nodo ha gli stessi figli
-    *i = *nearestNodePtr; //il padre ora punta a lui
+
+    Node* newNode = *nearestNodePtr;
     *nearestNodePtr = nullptr; //rimuovo il vecchio ptr alla foglia
-    delete n;
+    newNode->children = (*i)->children; //il nuovo nodo ha gli stessi figli
+    Node* oldNode = *i;
+    *i = newNode; //il padre ora punta a lui
+    delete oldNode;
+
     return true;
 }
 
@@ -720,7 +726,6 @@ template<class T, int dim>
 void NearTree<T,dim>::deleteNeighbouring(const vector<float>& targetPos, float maxDistanceSq){
     vector<typename Tree<T,dim>::Node**> v; //conterrà i nodi da eliminare partendo dalle foglie, in modo da avere meno nodi da spostare
     findNrecursive(Tree<T,dim>::r, targetPos, maxDistanceSq, v);
-std::cout<<targetPos[1]<<std::endl;
     for(auto it = v.begin(); it!=v.end(); it++) Tree<T,dim>::_del(*it);
 }
 

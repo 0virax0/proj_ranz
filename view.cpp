@@ -5,6 +5,7 @@
 #include <QPushButton>
 #include <iostream>
 #include <QLCDNumber>
+#include <QMessageBox>
 
 View::View(Model& mod): model(mod){  }
 
@@ -21,10 +22,19 @@ bool View::deleteParticles(vector<float> relativeMousePosition){
     model.container->deleteNeighbouring(relativeMousePosition, ipow(0.1f,2));
     return true;
 }
+bool View::saveParticles(){
+   return model.save();
+}
+bool View::restoreParticles(){
+    return model.restore();
+}
 
+MainWindow* MainWindow::window = nullptr;
 MainWindow::MainWindow() : view(model), state(painting)
 {
     setWindowTitle(tr("ParticleBox"));
+    window = this;
+
     Canvas *openGL = new Canvas(this, model);
     QPushButton* paint_button = new QPushButton("paint", this);
     QPushButton* erase_button = new QPushButton("erase", this);
@@ -35,14 +45,21 @@ MainWindow::MainWindow() : view(model), state(painting)
         comboBox->addItem(tr("Steam"));
         comboBox->addItem(tr("Fire"));
         comboBox->addItem(tr("GunPowder"));
+    QPushButton* save_button = new QPushButton("save", this);
+    QPushButton* restore_button = new QPushButton("restore", this);
 
-    QGridLayout *layout = new QGridLayout(this);
-    layout->addWidget(paint_button, 0, 1);
-    layout->addWidget(comboBox, 1, 1);
-    layout->addWidget(erase_button, 2, 1);
-    layout->addWidget(LCDCounter, 3, 1);
-    layout->addWidget(openGL, 4, 0);
-    setLayout(layout);
+    QGridLayout *Glayout = new QGridLayout(this);
+    QVBoxLayout *Vlayout = new QVBoxLayout(this);
+    Vlayout->addWidget(paint_button);
+    Vlayout->addWidget(comboBox);
+    Vlayout->addWidget(erase_button);
+    Vlayout->addWidget(save_button);
+    Vlayout->addWidget(restore_button);
+    Vlayout->addWidget(LCDCounter);
+
+    Glayout->addWidget(openGL, 0, 0);
+    Glayout->addLayout(Vlayout, 0, 1);
+    setLayout(Glayout);
 
     //faccio il refresh del canvas 30 volte al secondo
     QTimer *timer = new QTimer(this);
@@ -52,12 +69,20 @@ MainWindow::MainWindow() : view(model), state(painting)
     //collego i bottoni
     connect(paint_button, &QPushButton::clicked, this, [this]{this->set_state(painting);});
     connect(erase_button, &QPushButton::clicked, this, [this]{this->set_state(erasing);});
-    
+    connect(save_button, &QPushButton::clicked, this, [this]{this->view.saveParticles();});
+    connect(restore_button, &QPushButton::clicked, this, [this]{this->view.restoreParticles();});
+
     //collego il mouse al canvas
     connect(openGL, SIGNAL(positionChanged(vector<float>)), this, SLOT(brush_moved(vector<float>)));
 }
 
-MainWindow::~MainWindow() { }
+MainWindow::~MainWindow() {}
+
+void MainWindow::show_error(QString error){
+            QMessageBox messageBox;
+            messageBox.critical(0,"Error",error);
+            messageBox.setFixedSize(500,200);
+}
 
 void MainWindow::set_state(drawing_state newState){
     state = newState;
