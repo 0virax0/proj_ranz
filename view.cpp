@@ -30,6 +30,7 @@ bool View::restoreParticles(){
 }
 
 MainWindow* MainWindow::window = nullptr;
+MainWindow::visual_type MainWindow::visual_state = Color;
 MainWindow::MainWindow() : view(model), state(painting)
 {
     setWindowTitle(tr("ParticleBox"));
@@ -45,6 +46,11 @@ MainWindow::MainWindow() : view(model), state(painting)
         comboBox->addItem(tr("Steam"));
         comboBox->addItem(tr("Fire"));
         comboBox->addItem(tr("GunPowder"));
+    visualType = new QComboBox(this);
+        visualType->addItem(tr("Color"));
+        visualType->addItem(tr("Pressure"));
+        visualType->addItem(tr("Velocity"));
+        visualType->addItem(tr("Temperature"));
     QPushButton* save_button = new QPushButton("save", this);
     QPushButton* restore_button = new QPushButton("restore", this);
 
@@ -52,6 +58,7 @@ MainWindow::MainWindow() : view(model), state(painting)
     QVBoxLayout *Vlayout = new QVBoxLayout(this);
     Vlayout->addWidget(paint_button);
     Vlayout->addWidget(comboBox);
+    Vlayout->addWidget(visualType);
     Vlayout->addWidget(erase_button);
     Vlayout->addWidget(save_button);
     Vlayout->addWidget(restore_button);
@@ -71,6 +78,9 @@ MainWindow::MainWindow() : view(model), state(painting)
     connect(erase_button, &QPushButton::clicked, this, [this]{this->set_state(erasing);});
     connect(save_button, &QPushButton::clicked, this, [this]{this->view.saveParticles();});
     connect(restore_button, &QPushButton::clicked, this, [this]{this->view.restoreParticles();});
+
+    //collego la modalità di visualizzazione
+    connect(visualType, QOverload<const QString &>::of(&QComboBox::currentIndexChanged), this, [this]{MainWindow::visual_state = static_cast<MainWindow::visual_type>(this->visualType->currentIndex());});
 
     //collego il mouse al canvas
     connect(openGL, SIGNAL(positionChanged(vector<float>)), this, SLOT(brush_moved(vector<float>)));

@@ -79,7 +79,7 @@ public:
     Tree& operator=(const Tree& t); //assegnazione profonda
 
     Iterator insert(T* t, const vector<float> newPos);
-    Iterator insert(const Iterator& t);        //sposto un nodo(anche da un altro albero)
+    Iterator insert(const Iterator& t);        //inserisco il nodo puntato da t e ritorno il nuovo iteratore, solo se non ce n'è uno nella stessa posizione
 
     template<class Lambda>  //la lambda deve accettare una ref a il proprio puntatore nel suo nodo e deve restituire una nuova posizione
     void detach(Tree& dest, Lambda fn); //stacca tutto l'albero
@@ -438,13 +438,19 @@ typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const Iterator& t){
     //navigo tra i rami e inserisco non appena trovo spazio
     Iterator nP = p;
     int index=0;
+    int equality=0; //lo uso per controllare che non ci siano nodi con la stessa posizione
     while(nP != Iterator::pastEnd){
         p = nP; //scendo nel sottoalbero
         //trovo indice
         index=0;
-        for(int i=0; i<dim;i++)
+        equality=0;
+        for(int i=0; i<dim;i++){
            if(n->position[i] > p.ptr->position[i])
               index += pow(2, i); //se sono strettamente maggiore al pivot nella dimensione considerata setto la bitmask in modo da puntare il figlio corretto
+           if(n->position[i] == p.ptr->position[i]) equality+=1;
+        }
+        if(equality == dim)
+            return Iterator();   //il nodo ha la stessa posizione
         nP = p[index]; //seleziono il sottoalbero
     }
 

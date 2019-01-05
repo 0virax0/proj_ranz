@@ -1,6 +1,8 @@
 #include "canvas.h"
 #include <QMouseEvent>
 #include <iostream>
+#include "view.h"
+#include <math.h>
 
 Canvas::Canvas(QWidget *parent, Model& mod)
     : QOpenGLWidget(parent), model(mod)
@@ -33,8 +35,24 @@ void Canvas::paintEvent(QPaintEvent* event){
 
     //disegno le particelle
     model.update([&painter, this, &circlePen](Particle2* particle){
-        vector<int> col = particle->getColor();
-        painter.setBrush(QBrush(QColor(col[0], col[1], col[2])));
+        //visualize color based on visual state
+        vector<int> col(3, 0);
+        switch(MainWindow::visual_state){
+        case MainWindow::Color: { col = particle->getColor(); break;}
+        case MainWindow::Pressure:{
+            int pressure = particle->properties->pressure * 5;
+            col = {pressure ,0, 255 - pressure};
+        break;}
+        case MainWindow::Velocity: {
+            int vel = (particle->properties->velocity[0]+ particle->properties->velocity[0])* 1000;
+            col = {vel*4/10 ,vel*4/10, vel};
+        break;}
+        case MainWindow::Temperature: {
+            int Temp = particle->properties->temperature / 4;
+            col = {Temp ,0, 255 - Temp};
+        break;}
+        }
+        painter.setBrush(QBrush(QColor(std::min(255, std::max(0, col[0])), std::min(255, std::max(0, col[1])), std::min(255, std::max(0, col[2])))));
         painter.setPen(circlePen);
 
         int w = static_cast<int>(particle->properties->position[0] * width());
