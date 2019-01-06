@@ -40,13 +40,19 @@ bool Model::_update(Tree<Particle2,2>::Iterator it, tree* cont, float deltaTime)
     bool retVal=true;
 
     vector<Particle2*> neighbours;
-    cont->findNeighbouring(it, ipow(0.5f,2), neighbours);   //trovo i vicini
+    cont->findNeighbouring(it, ipow(0.05f,2), neighbours);   //trovo i vicini
+    std::cout<<neighbours.size()<<" ";
     it->advect(neighbours, deltaTime); //faccio advection a partire dalle mie properties e quelle dei vicini
 
     //ripeto per i sottoalberi
    for (unsigned int i=0; i< Tree<Particle2,2>::Nchild; i++)
        retVal &= _update(it[i], cont, deltaTime);
    return retVal;
+}
+bool Model::clear(){
+    delete container;
+    container = new NearTree<Particle2,2>;
+    return true;
 }
 bool Model::save(){
    return Serializer::serializeTree(*container);
@@ -56,8 +62,12 @@ bool Model::restore(){
     container = new NearTree<Particle2,2>;
    return DeSerializer::deSerializeTree(*container);
 }
+void Model::setGravity(bool use){
+    Particle2::useGravity = use;
+}
 
 //implementazione Particle2
+bool Particle2::useGravity = true;
 Particle2::Properties::Properties() : position(2,0), velocity(2,0) {}
 Particle2::Properties::Properties(const vector<float>& pos, const vector<float>& vel, float m, float p, float t): position(pos), velocity(vel), mass(m), pressure(p), temperature(t){}
 Particle2::Properties::Properties(const Properties& p): position(p.position), velocity(p.velocity), mass(p.mass), pressure(p.pressure), temperature(p.temperature) {}
@@ -128,55 +138,58 @@ void Particle2::advect(const vector<Particle2*>& neighbours, float deltaTime){
     for(auto it = neighbours.begin(); it!= neighbours.end(); it++){
         Properties* otherProperties = (*it)->properties;
         float currSqDist = sqDist(properties->position, otherProperties->position);
-        if(.00001f){     //salto le particelle esattamente sopra a me
+        if(currSqDist > ipow(0.001f,2)){     //salto le particelle esattamente sopra a me
             vector<float> versor = sub(properties->position, otherProperties->position);    //punta a me
-            normalize(versor);
 
             //contact advection
-            if(currSqDist < ipow(0.01f, 2)){
-                //calcolo la componente perpendicolare della velocità dell'altra particella rispetto a questa;
-                vector<float> perpendicularVel = mul(versor , dot(versor , otherProperties->velocity));
+            if(currSqDist < ipow(0.003f, 2)){
                 add_side(correctionDir, versor);
+                normalize(versor);
+
+                //calcolo la mia componente permìpendicolare rispetto all'altra particella
+                vector<float> myPerpendicularVel = mul(versor , dot(versor , newProperties->velocity)*(-1.0f + 0.5f * newProperties->mass));
+
+                //calcolo la componente perpendicolare della velocità dell'altra particella rispetto a questa;
+                vector<float> perpendicularVel = mul(versor , dot(versor , otherProperties->velocity) * 0.5f * otherProperties->mass);
+
+                //sommo le quantità di moto
+                add_side(perpendicularVel, myPerpendicularVel);
 
                 //per il calcolo dell'urto anelastico
-                mul_side(perpendicularVel, otherProperties->mass);
                 add_side(newProperties->velocity, perpendicularVel);
-            }
-            //aggiungo l'accelerazione di gravità
-            //add_side(newProperties->velocity, mul({0.0f, -0.981f}, deltaTime));
-
+            } else normalize(versor);
             //faccio l'advection della pressione
-            add_side(newProperties->velocity, mul(versor, (0.0001f * (1.0f/currSqDist) * (otherProperties->pressure - 1.0f) * deltaTime) / properties->mass));
+            add_side(newProperties->velocity, mul(versor, (0.000001f * (1.0f/currSqDist) * (otherProperties->pressure - 1.0f) * deltaTime) / properties->mass));
 
-            float distFactor = 1/(currSqDist * 10000 +1);
+            float distFactor = 1/(currSqDist * 1000 +1);
             meanTemp += otherProperties->temperature * distFactor;
             weight += distFactor;
         }
     }
+    //aggiungo l'accelerazione di gravità
+    if(useGravity)add_side(newProperties->velocity, mul({0.0f, -0.981f}, deltaTime));
+
     //advection della temperatura
     float curr = properties->temperature;
     meanTemp = (meanTemp + curr) / (weight);
-    newProperties->temperature = curr - deltaTime * conductivity * (curr - meanTemp)/100.0f;
+    newProperties->temperature = curr - deltaTime * conductivity * (curr - meanTemp);
+            //std::cout<<"curr:"<<curr<<","<<"mean:"<<meanTemp<<",newTemp"<<newProperties->temperature<<" ";
     entropy = specific_heat * (newProperties->temperature / properties->pressure);  //l'entropia cambia solo per scambio con le altre particelle (newTemperature)
 }
 
 bool Particle2::swapState(float deltaTime){
-    //sposto la particella secondo la nuova velocity, stando attento a non sovrappormi con le particelle con le quali collido
-    normalize(correctionDir);  //prendo la direzione correttiva dalla somma
-    float errorMagnitude = dot(newProperties->velocity, correctionDir);
-    if(errorMagnitude < 0.0f){
-        //non rispetto la direzione corretta, devo eliminare la componente erronea
-        mul_side(correctionDir, -errorMagnitude);
-        add_side(newProperties->velocity, correctionDir);
-    }
+    //faccio in modo che le particelle non si sovrappongano
+    mul_side(correctionDir, 0.02f * deltaTime);
+    add_side(newProperties->position, correctionDir);
+
     //applico lo spostamento
     add_side(newProperties->position, mul(newProperties->velocity, deltaTime));
     //controllo di essere dentro i confini
-    if(newProperties->position[0]<0.0f){ newProperties->position[0] = 0.01f;}
-    if(newProperties->position[0]>1.0f) newProperties->position[0] = 0.99f;
-    if(newProperties->position[1]<0.0f) newProperties->position[1] = 0.01f;
-    if(newProperties->position[1]>1.0f){ newProperties->position[1] = 0.99f;}
-            std::cout<<(isnan(newProperties->position[0])||isnan(newProperties->position[1])? "nanPosition":"");
+    if(newProperties->position[0]<0.0f){ newProperties->position[0] = 0.00f;}
+    if(newProperties->position[0]>1.0f) newProperties->position[0] = 1.0f;
+    if(newProperties->position[1]<0.0f) newProperties->position[1] = 0.005f;
+    if(newProperties->position[1]>1.0f){ newProperties->position[1] = 1.0f;}
+           // std::cout<<(isnan(newProperties->position[0])||isnan(newProperties->position[1])? "nanPosition":"");
 
     //swap
     Particle2::Properties* tmp = newProperties;
@@ -239,7 +252,7 @@ void Solid::advect(const vector<Particle2*>& neighbours, float deltaTime) {
     for(auto it = neighbours.begin(); it!= neighbours.end(); it++){
         Properties* otherProperties = (*it)->properties;
         float currSqDist = sqDist(properties->position, otherProperties->position);
-        if(currSqDist > 0.00001f){     //salto le particelle esattamente sopra a me
+        if(currSqDist > ipow(0.001f,2)){     //salto le particelle esattamente sopra a me
             vector<float> versorParallel = sub(properties->position, otherProperties->position);    //pointing towards me
             normalize(versorParallel);
             rotate90(versorParallel);
@@ -287,18 +300,18 @@ void Gas::advect(const vector<Particle2*>& neighbours, float deltaTime){
         float area = 2;
         for(auto it = neighbours.begin(); it!= neighbours.end(); it++){
             float sqdist = sqDist(properties->position, (*it)->properties->position);
-            if(sqdist > 0.001f)     //salto le particelle esattamente sopra a me
+            if(sqdist > ipow(0.07f,2))     //salto le particelle esattamente sopra a me
             if(sqdist<area)  area = sqdist;
         }
-        float newPressure = 1.0f + 0.00000001f * properties->temperature * entropy / area ;
+        float newPressure = 1.0f + 0.00001f * entropy / area ;
         newProperties->pressure = newPressure;
         newProperties->temperature = entropy * newPressure / specific_heat;
-            if(isnan(newPressure))std::cout<<"area:"<<area<<" ";
+            //if(isnan(newPressure))std::cout<<"area:"<<area<<" ";
 
     }else newProperties->pressure = 1.0f;
 
     //i gas più leggeri dell'aria vanno verso l'alto
-    add_side(newProperties->velocity, mul({0.0f, 0.981f + (newProperties->mass - 0.1f) * (newProperties->temperature - 293.0f) * 0.01f}, deltaTime));
+    add_side(newProperties->velocity, mul({0.0f, 0.981f + (newProperties->temperature - 293.0f) * 0.0005f / (newProperties->mass * 0.5f)}, deltaTime));
 
 }
 bool Gas::serialize(QXmlStreamWriter& xml) {
@@ -442,14 +455,13 @@ void Fire::advect(const vector<Particle2*>& neighbours, float deltaTime){
 
     //man mano il combustibile esaurisce e il fuoco si spegne
     if(materialLeft > 0){
-        materialLeft -= 0.2f * deltaTime;
-        entropy += 30.0f * deltaTime;
-        newProperties->temperature = entropy * newProperties->pressure / specific_heat;
-        vector<float> col{color[0]/255.0f, color[1]/255.0f, color[2]/255.0f};
-        col = mul(col, newProperties->temperature/1000.0f); //setta il colore in base alla temperatura
-        currColor[0] *= static_cast<int>(col[0]) * 255;
-        currColor[1] *= static_cast<int>(col[1]) * 255;
-        currColor[2] *= static_cast<int>(col[2]) * 255;
+        materialLeft -= 0.1f * deltaTime;
+        entropy += 15.0f * deltaTime;
+        float newTemp = entropy * newProperties->pressure / specific_heat;
+        newProperties->temperature = newTemp;
+        currColor[0] = static_cast<int>(materialLeft * 300.0f);
+        currColor[1] = static_cast<int>(materialLeft * 110.0f);
+        currColor[2] = static_cast<int>(materialLeft * 0.0f);
     }
 }
 bool Fire::serialize(QXmlStreamWriter& xml){

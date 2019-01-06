@@ -6,6 +6,7 @@
 #include <iostream>
 #include <QLCDNumber>
 #include <QMessageBox>
+#include <QCheckBox>
 
 View::View(Model& mod): model(mod){  }
 
@@ -28,6 +29,9 @@ bool View::saveParticles(){
 bool View::restoreParticles(){
     return model.restore();
 }
+bool View::clear(){
+    return model.clear();
+}
 
 MainWindow* MainWindow::window = nullptr;
 MainWindow::visual_type MainWindow::visual_state = Color;
@@ -38,8 +42,11 @@ MainWindow::MainWindow() : view(model), state(painting)
 
     Canvas *openGL = new Canvas(this, model);
     QPushButton* paint_button = new QPushButton("paint", this);
+    QCheckBox *useGravity = new QCheckBox("Use Gravity", this);
+    useGravity->setCheckState(Qt::Checked);
     QPushButton* erase_button = new QPushButton("erase", this);
     LCDCounter = new QLCDNumber(6, this);
+    QLCDNumber* LCDframes = new QLCDNumber(3, this);
     comboBox = new QComboBox(this);
         comboBox->addItem(tr("Water"));
         comboBox->addItem(tr("Ice"));
@@ -51,6 +58,7 @@ MainWindow::MainWindow() : view(model), state(painting)
         visualType->addItem(tr("Pressure"));
         visualType->addItem(tr("Velocity"));
         visualType->addItem(tr("Temperature"));
+    QPushButton* clear_button = new QPushButton("clear all", this);
     QPushButton* save_button = new QPushButton("save", this);
     QPushButton* restore_button = new QPushButton("restore", this);
 
@@ -59,10 +67,13 @@ MainWindow::MainWindow() : view(model), state(painting)
     Vlayout->addWidget(paint_button);
     Vlayout->addWidget(comboBox);
     Vlayout->addWidget(visualType);
+    Vlayout->addWidget(useGravity);
     Vlayout->addWidget(erase_button);
+    Vlayout->addWidget(clear_button);
     Vlayout->addWidget(save_button);
     Vlayout->addWidget(restore_button);
     Vlayout->addWidget(LCDCounter);
+    Vlayout->addWidget(LCDframes);
 
     Glayout->addWidget(openGL, 0, 0);
     Glayout->addLayout(Vlayout, 0, 1);
@@ -71,11 +82,14 @@ MainWindow::MainWindow() : view(model), state(painting)
     //faccio il refresh del canvas 30 volte al secondo
     QTimer *timer = new QTimer(this);
     connect(timer, &QTimer::timeout, openGL, &Canvas::animate);
+    connect(timer, &QTimer::timeout, this, [LCDframes, openGL]{LCDframes->display(1.0f/openGL->deltaTime);});   //mostro i frames al secondo
     timer->start(33);
 
     //collego i bottoni
     connect(paint_button, &QPushButton::clicked, this, [this]{this->set_state(painting);});
+    connect(useGravity, &QCheckBox::clicked, this, [this, useGravity]{this->model.setGravity(useGravity->checkState());});
     connect(erase_button, &QPushButton::clicked, this, [this]{this->set_state(erasing);});
+    connect(clear_button, &QPushButton::clicked, this, [this]{this->view.clear();});
     connect(save_button, &QPushButton::clicked, this, [this]{this->view.saveParticles();});
     connect(restore_button, &QPushButton::clicked, this, [this]{this->view.restoreParticles();});
 

@@ -4,6 +4,7 @@
 #include <QTimer>
 #include <QOpenGLWidget>
 #include "model.h"
+#include <QElapsedTimer>
 
 using std::vector;
 
@@ -13,6 +14,7 @@ class Canvas : public QOpenGLWidget{
 public:
     Canvas(QWidget *parent, Model& mod);
     Model& model;
+    float deltaTime;    //in seconds
 
 public slots:
     void animate();
@@ -24,8 +26,8 @@ protected:
     void paintEvent(QPaintEvent *event) override;
     void mouseMoveEvent(QMouseEvent* event)override;
 private:
-    int elapsedMs;
-    float deltaTime;    //in seconds
+    QElapsedTimer elapsedTimer;
+    int lastElapsed;
 };
 
 #endif // CANVAS_H

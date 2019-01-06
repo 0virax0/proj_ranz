@@ -14,6 +14,7 @@ class View : QObject{
 public slots:
    bool insertParticles(vector<float> relativeMousePosition, int particleType);
    bool deleteParticles(vector<float> relativeMousePosition);
+   bool clear();
    bool saveParticles();
    bool restoreParticles();
 public:

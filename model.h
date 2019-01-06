@@ -137,6 +137,8 @@ public:
 
    Particle2* substitute; //segnala che occorre sostituire la particella con quella puntata
 
+   static bool useGravity;
+
    virtual void advect(const vector<Particle2*>& neighbours, float deltaTime);
    bool swapState(float deltaTime);
    virtual vector<int> getColor()=0;
@@ -294,8 +296,10 @@ public:
     vector<int> getParticleColor(int particleType);
     template<class Lambda>  //outParticle prende un puntatore a Particle2 grazie al quale può leggere lo stato di ogni particella nel container
     bool update(Lambda outParticle, float deltaTime);
+    bool clear();
     bool save();
     bool restore();
+    void setGravity(bool use);
 
     Model();
     ~Model();
@@ -415,7 +419,9 @@ template<class T, int dim>
 typename Tree<T,dim>::Iterator Tree<T,dim>::insert(T* t, const vector<float> newPos)
 {
     Node* n = new Node(t, newPos);
-    return insert(Iterator(n));
+    Iterator newIt =  insert(Iterator(n));
+    if(newIt == Iterator::pastEnd) delete n;
+    return newIt;
 }
 template<class T, int dim>
 typename Tree<T,dim>::Iterator Tree<T,dim>::insert(const Iterator& t){

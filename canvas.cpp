@@ -7,15 +7,16 @@
 Canvas::Canvas(QWidget *parent, Model& mod)
     : QOpenGLWidget(parent), model(mod)
 {
-    elapsedMs = 0;
+    elapsedTimer.start();
+    lastElapsed = 0;
     setFixedSize(1000, 1000);
     setAutoFillBackground(false);
 }
 
 void Canvas::animate()
 {
-    elapsedMs = (elapsedMs + qobject_cast<QTimer*>(sender())->interval());
-    deltaTime = qobject_cast<QTimer*>(sender())->interval() / 1000.0f;
+    deltaTime = (elapsedTimer.elapsed() - lastElapsed) /1000.0f;
+    lastElapsed = elapsedTimer.elapsed();
     update();
 }
 
