@@ -40,7 +40,6 @@ public:
     enum drawing_state{painting, erasing};
     enum visual_type{Color, Pressure, Velocity, Temperature };
     void show_error(QString);
-    static MainWindow* window;
     static visual_type visual_state;
 
 public slots:

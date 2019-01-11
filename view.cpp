@@ -33,12 +33,10 @@ bool View::clear(){
     return model.clear();
 }
 
-MainWindow* MainWindow::window = nullptr;
 MainWindow::visual_type MainWindow::visual_state = Color;
 MainWindow::MainWindow() : view(model), state(painting)
 {
     setWindowTitle(tr("ParticleBox"));
-    window = this;
 
     Canvas *openGL = new Canvas(this, model);
     QPushButton* paint_button = new QPushButton("paint", this);

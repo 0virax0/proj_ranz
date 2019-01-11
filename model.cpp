@@ -40,8 +40,8 @@ bool Model::_update(Tree<Particle2,2>::Iterator it, tree* cont, float deltaTime)
     bool retVal=true;
 
     vector<Particle2*> neighbours;
-    cont->findNeighbouring(it, ipow(0.05f,2), neighbours);   //trovo i vicini
-    std::cout<<neighbours.size()<<" ";
+    cont->findNeighbouring(it, ipow(0.02f,2), neighbours);   //trovo i vicini
+    //std::cout<<neighbours.size()<<" ";
     it->advect(neighbours, deltaTime); //faccio advection a partire dalle mie properties e quelle dei vicini
 
     //ripeto per i sottoalberi
@@ -159,9 +159,9 @@ void Particle2::advect(const vector<Particle2*>& neighbours, float deltaTime){
                 add_side(newProperties->velocity, perpendicularVel);
             } else normalize(versor);
             //faccio l'advection della pressione
-            add_side(newProperties->velocity, mul(versor, (0.000001f * (1.0f/currSqDist) * (otherProperties->pressure - 1.0f) * deltaTime) / properties->mass));
+            add_side(newProperties->velocity, mul(versor, (0.00002f * (1.0f/currSqDist) * (otherProperties->pressure - 1.0f) * deltaTime) / properties->mass));
 
-            float distFactor = 1/(currSqDist * 1000 +1);
+            float distFactor = 1/(currSqDist * 1000000 +1);
             meanTemp += otherProperties->temperature * distFactor;
             weight += distFactor;
         }
@@ -179,17 +179,31 @@ void Particle2::advect(const vector<Particle2*>& neighbours, float deltaTime){
 
 bool Particle2::swapState(float deltaTime){
     //faccio in modo che le particelle non si sovrappongano
-    mul_side(correctionDir, 0.02f * deltaTime);
+    mul_side(correctionDir, 10.0f * deltaTime);
     add_side(newProperties->position, correctionDir);
 
     //applico lo spostamento
     add_side(newProperties->position, mul(newProperties->velocity, deltaTime));
+
     //controllo di essere dentro i confini
-    if(newProperties->position[0]<0.0f){ newProperties->position[0] = 0.00f;}
-    if(newProperties->position[0]>1.0f) newProperties->position[0] = 1.0f;
-    if(newProperties->position[1]<0.0f) newProperties->position[1] = 0.005f;
-    if(newProperties->position[1]>1.0f){ newProperties->position[1] = 1.0f;}
-           // std::cout<<(isnan(newProperties->position[0])||isnan(newProperties->position[1])? "nanPosition":"");
+    if(newProperties->position[0]<0.005f){
+        newProperties->position[0] = 0.005f;
+        if(newProperties->velocity[0]<0) newProperties->velocity[0] = 0;
+    }
+    if(newProperties->position[0]>1.0f){
+        newProperties->position[0] = 1.0f;
+        if(newProperties->velocity[0]>0) newProperties->velocity[0] = 0;
+    }
+    if(newProperties->position[1]<0.005f){
+        newProperties->position[1] = 0.005f;
+        if(newProperties->velocity[1]<0) newProperties->velocity[1] = 0;
+    }
+    if(newProperties->position[1]>1.0f){
+        newProperties->position[1] = 1.0f;
+        if(newProperties->velocity[1]>0) newProperties->velocity[1] = 0;
+
+    }
+            std::cout<<(isnan(newProperties->position[0])||isnan(newProperties->position[1])? "nanPosition":"");
 
     //swap
     Particle2::Properties* tmp = newProperties;
@@ -258,7 +272,7 @@ void Solid::advect(const vector<Particle2*>& neighbours, float deltaTime) {
             rotate90(versorParallel);
 
             //attrito solo a contatto
-            if(currSqDist < ipow(0.01f, 2)){
+            if(currSqDist < ipow(0.003f, 2)){
                 //calcolo la componente parallela della velocità dell'altra particella rispetto a questa e vice versa
                 float myParallelComponent = dot(versorParallel , properties->velocity);
                 float otherParallelComponent = dot(versorParallel , otherProperties->velocity);
@@ -408,7 +422,7 @@ bool Water::serialize(QXmlStreamWriter& xml){
 
 //implementazione steam
 vector<int> Steam::color{200, 200, 255};
-Steam::Steam(const vector<float>& pos, const vector<float>& vel): Particle2 (pos, vel, 0.2f, 1.0f, 373.0f, 5.0f, 0.2f), Gas (), currColor(color){}
+Steam::Steam(const vector<float>& pos, const vector<float>& vel): Particle2 (pos, vel, 0.2f, 1.0f, 383.0f, 5.0f, 0.2f), Gas (), currColor(color){}
 Steam::Steam(QXmlStreamReader& xml): Particle2 (xml), Gas(xml), currColor(color){/*letture aggiuntive*/ }
 Steam::~Steam() {}
 

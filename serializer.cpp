@@ -13,7 +13,6 @@ bool Serializer::serializeTree(Tree<Particle2, 2> &tree)
             std::cerr << "Error: Cannot write file "
                       << qPrintable(fileName) << ": "
                       << qPrintable(file.errorString()) << std::endl;
-           MainWindow::window->show_error("Error: Cannot write file "+fileName + ": " + file.errorString());
             return false;
         }
     QXmlStreamWriter xmlWriter(&file);
@@ -30,7 +29,6 @@ bool Serializer::serializeTree(Tree<Particle2, 2> &tree)
         std::cerr << "Error: Cannot serialize in file "
                   << qPrintable(fileName) << ": "
                   << qPrintable(file.errorString()) << std::endl;
-           MainWindow::window->show_error("Error: Cannot serialize in file "+fileName + ": " + file.errorString());
         return false;
     }
     return true;
@@ -54,7 +52,6 @@ bool DeSerializer::deSerializeTree(Tree<Particle2, 2>& destination){
             std::cerr << "Error: Cannot read file "
                       << qPrintable(fileName) << ": "
                       << qPrintable(file.errorString()) << std::endl;
-           MainWindow::window->show_error("Error: Cannot read file "+fileName + ": " + file.errorString());
             return false;
         }
 
@@ -84,7 +81,6 @@ bool DeSerializer::deSerializeTree(Tree<Particle2, 2>& destination){
         std::cerr << "Error: Cannot deSerialize file "
                   << qPrintable(fileName) << ": "
                   << qPrintable(file.errorString()) << std::endl;
-           MainWindow::window->show_error("Error: Cannot deserialize file "+fileName + ": " + file.errorString());
         return false;
     }
     return true;

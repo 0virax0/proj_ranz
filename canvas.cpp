@@ -45,7 +45,7 @@ void Canvas::paintEvent(QPaintEvent* event){
             col = {pressure ,0, 255 - pressure};
         break;}
         case MainWindow::Velocity: {
-            int vel = (particle->properties->velocity[0]+ particle->properties->velocity[0])* 1000;
+            int vel = (particle->properties->velocity[0]+ particle->properties->velocity[1])* 200;
             col = {vel*4/10 ,vel*4/10, vel};
         break;}
         case MainWindow::Temperature: {
