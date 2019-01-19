@@ -293,7 +293,7 @@ public:
     static int numParticles;
 
     bool insert(const vector<float>& pos, particle_type t); //inserisco in posizione cartesiana particelle di tipo t;
-    vector<int> getParticleColor(int particleType);
+    vector<int> getParticleColor(particle_type type);
     template<class Lambda>  //outParticle prende un puntatore a Particle2 grazie al quale può leggere lo stato di ogni particella nel container
     bool update(Lambda outParticle, float deltaTime);
     bool clear();
@@ -718,6 +718,15 @@ void NearTree<T,dim>::findNrecursive(typename Tree<T,dim>::Node*& n, const vecto
         }
         //mi inserisco in v solo ora perchè voglio che v sia in postordine
         if(interIndex == 0) v.push_back(&n);    //con indice 0 indico l'intersezione con maggiore connettività ovvero il nodo stesso
+
+    }else{  //la sfera potrebbe essere completamente all'interno di un cubo
+        for(unsigned int i=0; i< dim; i++)
+            if(targetPos[i] < n->bounds[2*i] || targetPos[i] > n->bounds[2*i + 1]) return;
+        //la sfera è completamente all'interno di un sottoCubo, trovo quale
+        unsigned int index = 0;
+        for(unsigned int i=0; i< dim; i++)
+            if(n->position[i] < targetPos[i]) index += pow(2, i);
+        findNrecursive(n->children[index], targetPos, maxDistanceSq, v); //cerco nel sottoalbero
     }
 }
 
@@ -726,7 +735,7 @@ void NearTree<T,dim>::findNeighbouring(typename Tree<T,dim>::Iterator target, fl
     typename Tree<T,dim>::Node*& n = target.ptr;
 
     vector<typename Tree<T,dim>::Node**> t; //conterrà i nodi da eliminare partendo dalle foglie, in modo da avere meno nodi da spostare
-    findNrecursive(Tree<T,dim>::r, Tree<T,dim>::r->position, maxDistanceSq, t);
+    findNrecursive(Tree<T,dim>::r, n->position, maxDistanceSq, t);
 
     for(auto it=t.begin(); it!=t.end(); it++){
         if(*(*it) != n){    //escludo il nodo passato per parametro

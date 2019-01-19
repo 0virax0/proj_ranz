@@ -23,8 +23,7 @@ bool Model::insert(const vector<float> &pos, particle_type t) {
     return true;
 }
 
-vector<int> Model::getParticleColor(int particleType){
-    particle_type type = static_cast<particle_type>(particleType);
+vector<int> Model::getParticleColor(particle_type type){
     switch(type){
     case Water: return Water::color;
     case Ice: return Ice::color;
@@ -138,11 +137,11 @@ void Particle2::advect(const vector<Particle2*>& neighbours, float deltaTime){
     for(auto it = neighbours.begin(); it!= neighbours.end(); it++){
         Properties* otherProperties = (*it)->properties;
         float currSqDist = sqDist(properties->position, otherProperties->position);
-        if(currSqDist > ipow(0.001f,2)){     //salto le particelle esattamente sopra a me
+        //if(currSqDist > ipow(0.0001f,2)){     //salto le particelle esattamente sopra a me
             vector<float> versor = sub(properties->position, otherProperties->position);    //punta a me
 
             //contact advection
-            if(currSqDist < ipow(0.003f, 2)){
+            if(currSqDist < ipow(0.004f, 2)){
                 add_side(correctionDir, versor);
                 normalize(versor);
 
@@ -164,7 +163,7 @@ void Particle2::advect(const vector<Particle2*>& neighbours, float deltaTime){
             float distFactor = 1/(currSqDist * 1000000 +1);
             meanTemp += otherProperties->temperature * distFactor;
             weight += distFactor;
-        }
+        //}
     }
     //aggiungo l'accelerazione di gravità
     if(useGravity)add_side(newProperties->velocity, mul({0.0f, -0.981f}, deltaTime));
@@ -266,13 +265,13 @@ void Solid::advect(const vector<Particle2*>& neighbours, float deltaTime) {
     for(auto it = neighbours.begin(); it!= neighbours.end(); it++){
         Properties* otherProperties = (*it)->properties;
         float currSqDist = sqDist(properties->position, otherProperties->position);
-        if(currSqDist > ipow(0.001f,2)){     //salto le particelle esattamente sopra a me
+        //if(currSqDist > ipow(0.0001f,2)){     //salto le particelle esattamente sopra a me
             vector<float> versorParallel = sub(properties->position, otherProperties->position);    //pointing towards me
             normalize(versorParallel);
             rotate90(versorParallel);
 
             //attrito solo a contatto
-            if(currSqDist < ipow(0.003f, 2)){
+            if(currSqDist < ipow(0.004f, 2)){
                 //calcolo la componente parallela della velocità dell'altra particella rispetto a questa e vice versa
                 float myParallelComponent = dot(versorParallel , properties->velocity);
                 float otherParallelComponent = dot(versorParallel , otherProperties->velocity);
@@ -287,7 +286,7 @@ void Solid::advect(const vector<Particle2*>& neighbours, float deltaTime) {
                 entropy += magnitude * 100.0f;
                 newProperties->temperature = entropy * newProperties->pressure / specific_heat;
             }
-        }
+        //}
     }
 }
 bool Solid::serialize(QXmlStreamWriter& xml) {
@@ -314,7 +313,7 @@ void Gas::advect(const vector<Particle2*>& neighbours, float deltaTime){
         float area = 2;
         for(auto it = neighbours.begin(); it!= neighbours.end(); it++){
             float sqdist = sqDist(properties->position, (*it)->properties->position);
-            if(sqdist > ipow(0.07f,2))     //salto le particelle esattamente sopra a me
+            if(sqdist > ipow(0.03f,2))     //salto le particelle sopra a me
             if(sqdist<area)  area = sqdist;
         }
         float newPressure = 1.0f + 0.00001f * entropy / area ;

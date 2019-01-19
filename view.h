@@ -17,6 +17,7 @@ public slots:
    bool clear();
    bool saveParticles();
    bool restoreParticles();
+   QColor staticParticleColor(int particleType);
 public:
    Model& model;
    View(Model& mod);

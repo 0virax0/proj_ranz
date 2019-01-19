@@ -32,6 +32,10 @@ bool View::restoreParticles(){
 bool View::clear(){
     return model.clear();
 }
+QColor View::staticParticleColor(int particleType){
+    vector<int> col = model.getParticleColor(static_cast<Model::particle_type>(particleType));
+    return QColor(col[0], col[1], col[2]);
+}
 
 MainWindow::visual_type MainWindow::visual_state = Color;
 MainWindow::MainWindow() : view(model), state(painting)
@@ -40,9 +44,12 @@ MainWindow::MainWindow() : view(model), state(painting)
 
     Canvas *openGL = new Canvas(this, model);
     QPushButton* paint_button = new QPushButton("paint", this);
+    paint_button->setCheckable(true);
+    paint_button->setChecked(true);
+    QPushButton* erase_button = new QPushButton("erase", this);
+    erase_button->setCheckable(true);
     QCheckBox *useGravity = new QCheckBox("Use Gravity", this);
     useGravity->setCheckState(Qt::Checked);
-    QPushButton* erase_button = new QPushButton("erase", this);
     LCDCounter = new QLCDNumber(6, this);
     QLCDNumber* LCDframes = new QLCDNumber(3, this);
     comboBox = new QComboBox(this);
@@ -51,6 +58,13 @@ MainWindow::MainWindow() : view(model), state(painting)
         comboBox->addItem(tr("Steam"));
         comboBox->addItem(tr("Fire"));
         comboBox->addItem(tr("GunPowder"));
+    //setto lo sfondo delle opzioni basato sul colore statico della particella
+    comboBox->setItemData(0, QBrush(view.staticParticleColor(0)), Qt::BackgroundRole);
+    comboBox->setItemData(1, QBrush(view.staticParticleColor(1)), Qt::BackgroundRole);
+    comboBox->setItemData(2, QBrush(view.staticParticleColor(2)), Qt::BackgroundRole);
+    comboBox->setItemData(3, QBrush(view.staticParticleColor(3)), Qt::BackgroundRole);
+    comboBox->setItemData(4, QBrush(view.staticParticleColor(4)), Qt::BackgroundRole);
+
     visualType = new QComboBox(this);
         visualType->addItem(tr("Color"));
         visualType->addItem(tr("Pressure"));
@@ -63,10 +77,10 @@ MainWindow::MainWindow() : view(model), state(painting)
     QGridLayout *Glayout = new QGridLayout(this);
     QVBoxLayout *Vlayout = new QVBoxLayout(this);
     Vlayout->addWidget(paint_button);
+    Vlayout->addWidget(erase_button);
     Vlayout->addWidget(comboBox);
     Vlayout->addWidget(visualType);
     Vlayout->addWidget(useGravity);
-    Vlayout->addWidget(erase_button);
     Vlayout->addWidget(clear_button);
     Vlayout->addWidget(save_button);
     Vlayout->addWidget(restore_button);
@@ -84,9 +98,9 @@ MainWindow::MainWindow() : view(model), state(painting)
     timer->start(33);
 
     //collego i bottoni
-    connect(paint_button, &QPushButton::clicked, this, [this]{this->set_state(painting);});
+    connect(paint_button, &QPushButton::clicked, this, [this, erase_button]{this->set_state(painting); erase_button->setChecked(false);});
+    connect(erase_button, &QPushButton::clicked, this, [this, paint_button]{this->set_state(erasing); paint_button->setChecked(false);});
     connect(useGravity, &QCheckBox::clicked, this, [this, useGravity]{this->model.setGravity(useGravity->checkState());});
-    connect(erase_button, &QPushButton::clicked, this, [this]{this->set_state(erasing);});
     connect(clear_button, &QPushButton::clicked, this, [this]{this->view.clear();});
     connect(save_button, &QPushButton::clicked, this, [this]{this->view.saveParticles();});
     connect(restore_button, &QPushButton::clicked, this, [this]{this->view.restoreParticles();});
