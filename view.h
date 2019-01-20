@@ -12,12 +12,12 @@ class View : QObject{
     Q_OBJECT
 
 public slots:
-   bool insertParticles(vector<float> relativeMousePosition, int particleType);
-   bool deleteParticles(vector<float> relativeMousePosition);
-   bool clear();
-   bool saveParticles();
-   bool restoreParticles();
-   QColor staticParticleColor(int particleType);
+   bool insertParticles(vector<float> relativeMousePosition, int particleType)const;
+   bool deleteParticles(vector<float> relativeMousePosition)const;
+   bool clear()const;
+   bool saveParticles()const;
+   bool restoreParticles()const;
+   QColor staticParticleColor(int particleType)const;
 public:
    Model& model;
    View(Model& mod);
@@ -40,12 +40,12 @@ public:
 
     enum drawing_state{painting, erasing};
     enum visual_type{Color, Pressure, Velocity, Temperature };
-    void show_error(QString);
+    void show_error(QString)const;
     static visual_type visual_state;
 
 public slots:
     void set_state(drawing_state newState);
-    void brush_moved(vector<float> newPos);
+    void brush_moved(vector<float> newPos)const;
 private:
     //ricorda lo stato del pennello
     drawing_state state;

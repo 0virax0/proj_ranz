@@ -10,29 +10,29 @@
 
 View::View(Model& mod): model(mod){  }
 
-bool View::insertParticles(vector<float> relativeMousePosition, int particleType){
+bool View::insertParticles(vector<float> relativeMousePosition, int particleType)const{
     if(relativeMousePosition[0]>1.0f ||relativeMousePosition[0]<0.0f ||relativeMousePosition[1]>1.0f ||relativeMousePosition[1]<0.0f ){ std::cerr<<"coordinate in input sbagliate"<<std::endl; return false;}
    //calcolo la posizione adatta al modello
     relativeMousePosition[1] = 1.0f - relativeMousePosition[1];
     return model.insert(relativeMousePosition, static_cast<Model::particle_type>(particleType));
 }
-bool View::deleteParticles(vector<float> relativeMousePosition){
+bool View::deleteParticles(vector<float> relativeMousePosition)const{
     if(relativeMousePosition[0]>1.0f ||relativeMousePosition[0]<0.0f ||relativeMousePosition[1]>1.0f ||relativeMousePosition[1]<0.0f ){ std::cerr<<"coordinate in input sbagliate"<<std::endl; return false;}
    //calcolo la posizione adatta al modello
     relativeMousePosition[1] = 1.0f - relativeMousePosition[1];
     model.container->deleteNeighbouring(relativeMousePosition, ipow(0.1f,2));
     return true;
 }
-bool View::saveParticles(){
+bool View::saveParticles()const{
    return model.save();
 }
-bool View::restoreParticles(){
+bool View::restoreParticles()const{
     return model.restore();
 }
-bool View::clear(){
+bool View::clear()const{
     return model.clear();
 }
-QColor View::staticParticleColor(int particleType){
+QColor View::staticParticleColor(int particleType)const{
     vector<int> col = model.getParticleColor(static_cast<Model::particle_type>(particleType));
     return QColor(col[0], col[1], col[2]);
 }
@@ -114,7 +114,7 @@ MainWindow::MainWindow() : view(model), state(painting)
 
 MainWindow::~MainWindow() {}
 
-void MainWindow::show_error(QString error){
+void MainWindow::show_error(QString error)const{
             QMessageBox messageBox;
             messageBox.critical(0,"Error",error);
             messageBox.setFixedSize(500,200);
@@ -125,7 +125,7 @@ void MainWindow::set_state(drawing_state newState){
     std::cout<<"state changed"<<std::endl;
 }
 
-void MainWindow::brush_moved(vector<float> newPos){
+void MainWindow::brush_moved(vector<float> newPos)const{
     switch(state){
     case painting: view.insertParticles(newPos, comboBox->currentIndex()); break;
     case erasing: view.deleteParticles(newPos); break;

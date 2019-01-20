@@ -141,8 +141,8 @@ public:
 
    virtual void advect(const vector<Particle2*>& neighbours, float deltaTime);
    bool swapState(float deltaTime);
-   virtual vector<int> getColor()=0;
-   virtual bool serialize(QXmlStreamWriter&);
+   virtual vector<int> getColor()const =0;
+   virtual bool serialize(QXmlStreamWriter&)const;
 
    Particle2(); //create properties in the heap
    Particle2(const vector<float>& pos, const vector<float>& vel, float m, float p, float t, float cond, float spec_heat);
@@ -177,7 +177,7 @@ public:
    float friction;
 
    void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-   bool serialize(QXmlStreamWriter&) override;
+   bool serialize(QXmlStreamWriter&)const override;
 
    Solid(float fric);
    Solid(QXmlStreamReader&);
@@ -185,7 +185,7 @@ public:
 class Liquid : public virtual Particle2{
    public:
    void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-   bool serialize(QXmlStreamWriter&) override;
+   bool serialize(QXmlStreamWriter&)const override;
 
    Liquid();
    Liquid(QXmlStreamReader&);
@@ -193,7 +193,7 @@ class Liquid : public virtual Particle2{
 class Gas : public virtual Particle2{
 public:
    void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-   bool serialize(QXmlStreamWriter&) override;
+   bool serialize(QXmlStreamWriter&)const override;
 
    Gas();
    Gas(QXmlStreamReader&);
@@ -205,7 +205,7 @@ public:
    float explosion_pressure;
 
    void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-   bool serialize(QXmlStreamWriter&) override;
+   bool serialize(QXmlStreamWriter&)const override;
 
    Explosive(float thresh_t, float thresh_p, float explosion_pres);
    Explosive(QXmlStreamReader&);
@@ -218,8 +218,8 @@ public:
     vector<int> currColor;
 
     void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-    vector<int> getColor() override;
-    bool serialize(QXmlStreamWriter&) override;
+    vector<int> getColor()const override;
+    bool serialize(QXmlStreamWriter&)const override;
 
     Water(const vector<float>& pos, const vector<float>& vel = {0,0});
     Water(QXmlStreamReader&);
@@ -231,8 +231,8 @@ public:
     vector<int> currColor;
 
     void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-    vector<int> getColor() override;
-    bool serialize(QXmlStreamWriter&) override;
+    vector<int> getColor()const override;
+    bool serialize(QXmlStreamWriter&)const override;
 
     Ice(const vector<float>& pos, const vector<float>& vel = {0,0});
     Ice(QXmlStreamReader&);
@@ -244,8 +244,8 @@ public:
     vector<int> currColor;
 
     void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-    vector<int> getColor() override;
-    bool serialize(QXmlStreamWriter&) override;
+    vector<int> getColor()const override;
+    bool serialize(QXmlStreamWriter&)const override;
 
     Steam(const vector<float>& pos, const vector<float>& vel = {0,0});
     Steam(QXmlStreamReader&);
@@ -258,8 +258,8 @@ public:
     vector<int> currColor;
 
     void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-    vector<int> getColor() override;
-    bool serialize(QXmlStreamWriter&) override;
+    vector<int> getColor()const override;
+    bool serialize(QXmlStreamWriter&)const override;
 
     GunPowder(const vector<float>& pos, const vector<float>& vel = {0,0});
     GunPowder(QXmlStreamReader&);
@@ -272,10 +272,10 @@ public:
     vector<int> currColor;
 
     void advect(const vector<Particle2*>& neighbours, float deltaTime) override;
-    vector<int> getColor() override;
-    bool serialize(QXmlStreamWriter&) override;
+    vector<int> getColor()const override;
+    bool serialize(QXmlStreamWriter&)const override;
 
-    Fire(const vector<float>& pos, const vector<float>& vel = {0,0}, float start_pressure = 1);
+    Fire(const vector<float>& pos, const vector<float>& vel = {0,0}, float start_pressure = 1.0f);
     Fire(QXmlStreamReader&);
     ~Fire() override;
 protected:
@@ -292,14 +292,14 @@ public:
     tree* container;
     static int numParticles;
 
-    bool insert(const vector<float>& pos, particle_type t); //inserisco in posizione cartesiana particelle di tipo t;
-    vector<int> getParticleColor(particle_type type);
+    bool insert(const vector<float>& pos, particle_type t)const; //inserisco in posizione cartesiana particelle di tipo t;
+    vector<int> getParticleColor(particle_type type)const;
     template<class Lambda>  //outParticle prende un puntatore a Particle2 grazie al quale può leggere lo stato di ogni particella nel container
     bool update(Lambda outParticle, float deltaTime);
     bool clear();
-    bool save();
+    bool save()const;
     bool restore();
-    void setGravity(bool use);
+    void setGravity(bool use)const;
 
     Model();
     ~Model();
