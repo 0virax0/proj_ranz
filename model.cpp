@@ -158,7 +158,7 @@ void Particle2::advect(const vector<Particle2*>& neighbours, float deltaTime){
                 add_side(newProperties->velocity, perpendicularVel);
             } else normalize(versor);
             //faccio l'advection della pressione
-            add_side(newProperties->velocity, mul(versor, (0.000002f * (1.0f/(currSqDist + 1.0f)) * (otherProperties->temperature) * deltaTime) / properties->mass));
+            add_side(newProperties->velocity, mul(versor, (0.000002f * (1.0f/(currSqDist + 1.0f)) * (newProperties->pressure-1.0f)*entropy*0.1f * deltaTime) / properties->mass));
 
             float distFactor = 1.0f/(currSqDist * 100000 +1.0f);
             meanTemp += otherProperties->temperature * distFactor;
@@ -489,7 +489,7 @@ bool Fire::serialize(QXmlStreamWriter& xml)const{
 
 //implementazione gunpowder
 vector<int> GunPowder::color{20, 20, 20};
-GunPowder::GunPowder(const vector<float>& pos, const vector<float>& vel): Particle2 (pos, vel, 0.53f, 1.0f, 279.0f, 5.0f, 0.3f), Solid (0.6f), Explosive (650.0f, 5.0f, 10.0f), currColor(color){}
+GunPowder::GunPowder(const vector<float>& pos, const vector<float>& vel): Particle2 (pos, vel, 0.53f, 1.0f, 279.0f, 5.0f, 0.3f), Solid (0.6f), Explosive (400.0f, 2.0f, 20.0f), currColor(color){}
 GunPowder::GunPowder(QXmlStreamReader& xml): Particle2 (xml), Solid(xml), Explosive (xml), currColor(color){/*letture aggiuntive*/ }
 GunPowder::~GunPowder() {}
 
