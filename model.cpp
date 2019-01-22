@@ -202,7 +202,7 @@ bool Particle2::swapState(float deltaTime){
         if(newProperties->velocity[1]>0) newProperties->velocity[1] = 0;
 
     }
-            std::cout<<(isnan(newProperties->position[0])||isnan(newProperties->position[1])? "nanPosition":"");
+           // std::cout<<(isnan(newProperties->position[0])||isnan(newProperties->position[1])? "nanPosition":"");
 
     //swap
     Particle2::Properties* tmp = newProperties;

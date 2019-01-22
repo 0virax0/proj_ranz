@@ -7,6 +7,8 @@
 #include <QLCDNumber>
 #include <QMessageBox>
 #include <QCheckBox>
+#include <QLabel>
+#include <QGroupBox>
 
 View::View(Model& mod): model(mod){  }
 
@@ -50,8 +52,17 @@ MainWindow::MainWindow() : view(model), state(painting)
     erase_button->setCheckable(true);
     QCheckBox *useGravity = new QCheckBox("Use Gravity", this);
     useGravity->setCheckState(Qt::Checked);
+    QLabel *label0 = new QLabel(this);
+    label0->setText("Numero Particelle");
+    label0->setMaximumHeight(10);
     LCDCounter = new QLCDNumber(6, this);
+    LCDCounter->setMaximumHeight(50);
     QLCDNumber* LCDframes = new QLCDNumber(3, this);
+    LCDframes->setMaximumHeight(50);
+    QLabel *label1 = new QLabel(this);
+    label1->setText("Frames Per Secondo");
+    label1->setMaximumHeight(10);
+    QLabel *label2 = new QLabel(this);
     comboBox = new QComboBox(this);
         comboBox->addItem(tr("Water"));
         comboBox->addItem(tr("Ice"));
@@ -76,6 +87,7 @@ MainWindow::MainWindow() : view(model), state(painting)
 
     QGridLayout *Glayout = new QGridLayout(this);
     QVBoxLayout *Vlayout = new QVBoxLayout(this);
+
     Vlayout->addWidget(paint_button);
     Vlayout->addWidget(erase_button);
     Vlayout->addWidget(comboBox);
@@ -84,8 +96,11 @@ MainWindow::MainWindow() : view(model), state(painting)
     Vlayout->addWidget(clear_button);
     Vlayout->addWidget(save_button);
     Vlayout->addWidget(restore_button);
+    Vlayout->addWidget(label0);
     Vlayout->addWidget(LCDCounter);
+    Vlayout->addWidget(label1);
     Vlayout->addWidget(LCDframes);
+    Vlayout->addWidget(label2);
 
     Glayout->addWidget(openGL, 0, 0);
     Glayout->addLayout(Vlayout, 0, 1);
