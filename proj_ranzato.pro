@@ -26,12 +26,17 @@ CONFIG += c++11
 
 SOURCES += \
         main.cpp \
+    particles.cpp \
+    utils.cpp \
         view.cpp \
     model.cpp \
     serializer.cpp \
     canvas.cpp
 
 HEADERS += \
+    particles.h \
+    tree.h \
+    utils.h \
         view.h \
     model.h \
     serializer.h \
